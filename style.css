@@ -130,3 +130,11 @@ input:focus,select:focus{border-color:var(--or)}
 .cbtns{display:flex;gap:8px;margin-top:12px}
 @media print{body *{visibility:hidden}#card,#card *{visibility:visible}#card{position:fixed;left:50%;top:16px;transform:translateX(-50%);width:300px}}
 @media (min-width:700px){.grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}}
+.li .row{flex-wrap:wrap;justify-content:flex-end}
+.ev{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+.ev figure{margin:0;text-align:center;font-size:12px;color:var(--mut)}
+.ev img{width:84px;height:84px;border-radius:14px;object-fit:cover;display:block;margin-bottom:4px;cursor:pointer;border:1px solid var(--bd)}
+.ev .nophoto{width:84px;height:84px;border-radius:14px;background:var(--card2);display:grid;place-items:center;font-size:26px;margin-bottom:4px}
+.live{display:inline-block;font-weight:800;font-size:13px;padding:5px 12px;border-radius:99px}
+.live.on{background:rgba(53,208,106,.16);color:var(--gr)}.live.off{background:var(--card2);color:var(--mut)}
+.kid h2{margin:0;font-size:24px}

@@ -1,5 +1,5 @@
 'use strict';
-const VERSION='2.0.0';
+const VERSION='2.2.0';
 const IDLE_MS=5*60*1000;
 const SPORTS=[{id:'basquete',name:'Basquete',color:'#ff7a1a',emoji:'🏀'},{id:'futsal',name:'Futsal',color:'#35d06a',emoji:'⚽'}];
 const sp_=id=>SPORTS.find(s=>s.id===id)||{name:id,color:'#999',emoji:'🏅'};
@@ -122,7 +122,7 @@ function adminHtml(){
   if(T==='alunos'){
     const list=st.students.filter(s=>s.name.toLowerCase().includes(st.aq.toLowerCase()));
     h+=`<div class="card"><input id="aq" placeholder="🔍 Buscar aluno…" value="${esc(st.aq)}" autocomplete="off"></div><div class="card"><h3>${list.length} alunos</h3>`;
-    h+=list.length?list.map(s=>`<div class="li"><div class="lf">${avatar(s,44)}<div><b>${esc(s.name)}</b><div class="m">${(s.sports||[]).map(x=>`<span class="tag">${sp_(x).emoji} ${sp_(x).name}</span>`).join('')}${esc(s.turma||'')} · Código <b>${esc(s.code)}</b></div></div></div><div class="row" style="margin:0"><button class="btn sm sec" data-a="card" data-v="${s.id}">🪪</button><button class="btn sm sec" data-a="edit" data-v="${s.id}">Editar</button>${adm?`<button class="btn sm ${st.delId===s.id?'red':'sec'}" data-a="del" data-v="${s.id}">${st.delId===s.id?'Confirmar?':'🗑'}</button>`:''}</div></div>`).join(''):'<div class="empty">Nenhum aluno encontrado.</div>';
+    h+=list.length?list.map(s=>`<div class="li"><div class="lf">${avatar(s,44)}<div><b>${esc(s.name)}</b><div class="m">${(s.sports||[]).map(x=>`<span class="tag">${sp_(x).emoji} ${sp_(x).name}</span>`).join('')}${esc(s.turma||'')} · Código <b>${esc(s.code)}</b></div></div></div><div class="row" style="margin:0"><button class="btn sm sec" data-a="sendpais" data-v="${s.id}">📲</button><button class="btn sm sec" data-a="card" data-v="${s.id}">🪪</button><button class="btn sm sec" data-a="edit" data-v="${s.id}">Editar</button>${adm?`<button class="btn sm ${st.delId===s.id?'red':'sec'}" data-a="del" data-v="${s.id}">${st.delId===s.id?'Confirmar?':'🗑'}</button>`:''}</div></div>`).join(''):'<div class="empty">Nenhum aluno encontrado.</div>';
     h+='</div>';
   }
   if(T==='cad'){
@@ -132,7 +132,7 @@ function adminHtml(){
     <div class="fld"><label>WhatsApp do responsável (com DDD)</label><input id="nw" inputmode="tel" placeholder="21 99999-9999"></div>
     <div class="fld"><label>Esporte(s) em que está inscrito</label><div id="cadsp">${sportChips([])}</div></div>
     <div class="row"><div id="prev" class="av" style="margin:0;background:var(--card2);color:var(--mut)">${st.newPhoto?`<img src="${st.newPhoto}" alt="">`:'📷'}</div><label class="btn sec" style="cursor:pointer">Foto do aluno<input type="file" id="ph" accept="image/*" style="display:none"></label></div>
-    <button class="btn full" data-a="addstudent">Cadastrar aluno</button><p class="hint">O código de 4 dígitos e o QR Code da carteirinha são gerados automaticamente.</p></div>`;
+    <button class="btn full" data-a="addstudent">Cadastrar aluno</button><p class="hint">O código de 4 dígitos serve para o check-in e para os pais acompanharem. O QR Code da carteirinha é gerado automaticamente.</p></div>`;
   }
   if(T==='profs'&&adm){
     h+=`<div class="card"><h3>Professores</h3>`;
@@ -141,6 +141,7 @@ function adminHtml(){
   }
   if(T==='cfg'){
     h+=`<div class="card"><h3>Meu acesso</h3><button class="btn sec full" data-a="editprof" data-v="${st.prof.id}">Trocar meu nome ou PIN</button></div>
+    <div class="card"><h3>Página dos pais</h3><p class="hint" style="margin:0 0 10px">Os pais abrem este endereço e digitam o código de 4 dígitos do filho (o mesmo do check-in, na aba Alunos). O botão 📲 do aluno já envia o link com o código.</p><div class="fld"><input id="pl" readonly value="${esc(portalUrl())}"></div><button class="btn sec full" data-a="copylink">Copiar link</button></div>
     <div class="card"><h3>Este aparelho</h3><p class="hint" style="margin:0 0 10px">Versão ${VERSION}. O professor é bloqueado sozinho após 5 minutos sem uso.</p><button class="btn red full" data-a="logout">Desconectar este aparelho</button></div>`;
   }
   return h;
@@ -185,14 +186,15 @@ function padKey(k){
 /* ---------- câmera: foto e QR ---------- */
 function snapFrom(v){const c=document.createElement('canvas');c.width=c.height=240;const x=c.getContext('2d');const m=Math.min(v.videoWidth,v.videoHeight);x.drawImage(v,(v.videoWidth-m)/2,(v.videoHeight-m)/2,m,m,0,0,240,240);return c.toDataURL('image/jpeg',0.6);}
 function capturePhoto(){return new Promise(async res=>{
+  // resolve: foto (texto) | '' (câmera indisponível) | null (aluno cancelou)
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){res('');return;}
-  let stream;try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:false});}catch(e){toast('Câmera indisponível: feito sem foto');res('');return;}
+  let stream;try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:false});}catch(e){res('');return;}
   camStream=stream;let done=false;
-  const finish=d=>{if(done)return;done=true;res(d||'');closeModal();};
-  openModal(`<h2>Sorria! 📸</h2><p>A foto será tirada em <b id="cd">3</b></p><div class="vid mirror"><video id="vd" playsinline muted autoplay></video></div><button class="btn sec full" id="skp">Pular foto</button>`,()=>{stopCam();if(!done){done=true;res('');}});
+  const finish=d=>{if(done)return;done=true;res(d);closeModal();};
+  openModal(`<h2>Sorria! 📸</h2><p>A foto será tirada em <b id="cd">3</b></p><div class="vid mirror"><video id="vd" playsinline muted autoplay></video></div><button class="btn sec full" id="cnc">Cancelar</button>`,()=>{stopCam();if(!done){done=true;res(null);}});
   const v=$('#vd');v.srcObject=stream;await v.play().catch(()=>{});
-  $('#skp').onclick=()=>finish('');
-  let n=3;const t=setInterval(()=>{if(done){clearInterval(t);return;}n--;if(n>0){const c=$('#cd');if(c)c.textContent=n;return;}clearInterval(t);finish(v.videoWidth?snapFrom(v):'');},1000);
+  $('#cnc').onclick=()=>finish(null);
+  let n=3;const t=setInterval(()=>{if(done){clearInterval(t);return;}n--;if(n>0){const c=$('#cd');if(c)c.textContent=n;return;}if(!v.videoWidth){n=1;return;}clearInterval(t);finish(snapFrom(v));},1000);
 });}
 async function scanQR(sport){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){toast('Câmera indisponível neste aparelho');return;}
@@ -227,17 +229,21 @@ function tapStudent(id,sport){
   openPad({title:s.name,sub:stt==='in'?'Digite seu código para sair':'Digite seu código para entrar',avatar:avatar(s,72),check:c=>c===s.code,done:()=>proceed(s,sport)});
 }
 async function proceed(s,sport){
-  if(status(s.id,sport)==='out'){toast('Você já fez check-out hoje 😉');return;}
+  const stt=status(s.id,sport);
+  if(stt==='out'){toast('Você já fez check-out hoje 😉');return;}
   const photo=await capturePhoto();
+  if(photo===null)return;
+  if(photo===''&&stt==='none'){toast('Para entrar é preciso liberar a câmera e tirar a foto.');return;}
   toggle(s,sport,photo);
 }
 function toggle(s,sport,photo){
+  const now=Date.now();
   const day=dkey(),id=logId(day,sport,s.id),cur=(st.logs[day]||{})[id],ref=fs.collection('logs').doc(id),first=s.name.split(' ')[0],sp=sp_(sport);
   if(!cur){
-    ref.set({id,day,sport,sid:s.id,in:Date.now(),photoIn:photo||''}).catch(err);
+    ref.set({id,day,sport,sid:s.id,in:now,photoIn:photo||''}).catch(err);portalEvent(s,id,{day,sport,in:now,photoIn:photo||'',ts:now},false);
     flash('✅','Check-in feito!',`Bom treino, ${first} ${sp.emoji}`,photo);queue(s,sport,'in');
   }else if(!cur.out){
-    ref.update({out:Date.now(),photoOut:photo||''}).catch(err);
+    ref.update({out:now,photoOut:photo||''}).catch(err);portalEvent(s,id,{out:now,photoOut:photo||''},true);
     flash('👋','Check-out feito!',`Até a próxima, ${first}`,photo);queue(s,sport,'out');
   }
 }
@@ -254,7 +260,7 @@ function openProfPicker(){
 }
 function pickProf(id){const p=st.profs.find(x=>x.id===id);if(!p)return;
   openPad({title:p.name,sub:'Digite seu PIN',check:async c=>(await hashPin(c,p.id))===p.pinHash,done:()=>unlock(p)});}
-function unlock(p){st.prof={id:p.id,name:p.name,role:p.role};st.view='admin';st.aTab=st.pending.length?'av':'hoje';st.delId=null;bumpIdle();render();}
+function unlock(p){st.prof={id:p.id,name:p.name,role:p.role};st.view='admin';st.aTab=st.pending.length?'av':'hoje';st.delId=null;bumpIdle();render();ensurePortal();}
 function openFirstAdmin(){openModal(`<h2>Primeiro acesso</h2><p>Crie o administrador do sistema</p><div class="fld"><input id="fn" placeholder="Seu nome"></div><div class="fld"><input id="fp" type="password" inputmode="numeric" maxlength="4" placeholder="PIN de 4 números"></div><button class="btn full" data-a="mkadmin">Criar administrador</button><button class="btn sec full" data-a="close" style="margin-top:8px">Cancelar</button>`);}
 async function mkAdmin(){
   const name=$('#fn').value.trim(),pin=$('#fp').value.trim();
@@ -284,6 +290,29 @@ async function saveProf(id){
   closeModal();toast('Professor atualizado');render();
 }
 
+/* ---------- portal dos pais (o acesso é o código de 4 dígitos do aluno) ---------- */
+const portalUrl=()=>new URL('pais.html',location.href).href.split('?')[0].split('#')[0];
+function syncPortal(s){if(!s.code)return;fs.collection('portal').doc(s.code).set({first:String(s.name).split(' ')[0],sports:s.sports||[],updated:Date.now()},{merge:true}).catch(err);}
+function portalEvent(s,id,data,merge){if(!s.code)return;const r=fs.collection('portal').doc(s.code).collection('events').doc(id);(merge?r.set(data,{merge:true}):r.set(data)).catch(err);}
+let portalSynced=false;
+function ensurePortal(){if(portalSynced)return;portalSynced=true;st.students.forEach(syncPortal);}
+function sendPais(id){
+  const s=st.students.find(x=>x.id===id);if(!s)return;
+  const msg=`Olá! Acompanhe a entrada e a saída de ${s.name.split(' ')[0]} nos treinos do Athletic Meriti: ${portalUrl()}?m=${s.code}\nCódigo: ${s.code}`;
+  window.open('https://wa.me/'+(s.phone||'')+'?text='+encodeURIComponent(msg),'_blank');
+}
+function newCode(id){
+  const s=st.students.find(x=>x.id===id);if(!s)return;
+  if(!confirm('Gerar um novo código? O código atual deixa de funcionar, no check-in e para os pais.'))return;
+  let c;do{c=String(Math.floor(1000+Math.random()*9000));}while(st.students.some(x=>x.code===c));
+  const old=s.code;
+  fs.collection('students').doc(id).update({code:c}).catch(err);
+  syncPortal(Object.assign({},s,{code:c}));
+  if(old){const pr=fs.collection('portal').doc(old),nr=fs.collection('portal').doc(c).collection('events');
+    pr.collection('events').get().then(sn=>{const b=fs.batch();sn.forEach(d=>{b.set(nr.doc(d.id),d.data());b.delete(d.ref);});b.delete(pr);return b.commit();}).catch(err);}
+  closeModal();toast('Novo código: '+c);
+}
+
 /* ---------- alunos ---------- */
 function readPhoto(f,cb){const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=c.height=200;const x=c.getContext('2d');const m=Math.min(im.width,im.height);x.drawImage(im,(im.width-m)/2,(im.height-m)/2,m,m,0,0,200,200);cb(c.toDataURL('image/jpeg',0.75));};im.src=r.result;};r.readAsDataURL(f);}
 function saveNewStudent(){
@@ -292,7 +321,7 @@ function saveNewStudent(){
   const ph=normPhone($('#nw').value);if($('#nw').value.trim()&&ph.length<12)return toast('WhatsApp inválido: use DDD + número');
   let code;do{code=String(Math.floor(1000+Math.random()*9000));}while(st.students.some(s=>s.code===code));
   const s={id:uid('s'),name,turma:$('#nt').value.trim(),phone:ph,photo:st.newPhoto||'',code,sports,createdBy:st.prof.name,createdAt:Date.now()};
-  fs.collection('students').doc(s.id).set(s).catch(err);
+  fs.collection('students').doc(s.id).set(s).catch(err);syncPortal(s);
   st.newPhoto='';render();toast(`✅ ${name} cadastrado! Código: ${code}`);openCard(s);
 }
 function openEdit(id){
@@ -301,7 +330,7 @@ function openEdit(id){
   <div class="fld"><label>Nome</label><input id="en" value="${esc(s.name)}"></div><div class="fld"><label>Turma</label><input id="et" value="${esc(s.turma||'')}"></div>
   <div class="fld"><label>WhatsApp com DDD</label><input id="ew" inputmode="tel" value="${esc((s.phone||'').replace(/^55/,''))}"></div>
   <div class="fld"><label>Esportes</label><div id="edsp">${sportChips(s.sports||[])}</div></div>
-  <p class="hint" style="margin-bottom:10px">Código do aluno: <b>${esc(s.code)}</b></p>
+  <p class="hint" style="margin-bottom:10px">Código do aluno (check-in e acesso dos pais): <b>${esc(s.code)}</b></p><button class="btn sm sec" data-a="newcode" data-v="${s.id}" style="margin-bottom:12px">Gerar novo código</button>
   <button class="btn full" data-a="saveedit" data-v="${s.id}">Salvar</button><button class="btn sec full" data-a="close" style="margin-top:8px">Cancelar</button>`);
 }
 function saveEdit(id){
@@ -309,7 +338,7 @@ function saveEdit(id){
   const name=$('#en').value.trim();if(!name)return toast('O nome não pode ficar vazio');
   const sports=[...document.querySelectorAll('#edsp .chip.on')].map(x=>x.dataset.v);if(!sports.length)return toast('Escolha ao menos um esporte');
   const ph=normPhone($('#ew').value);if($('#ew').value.trim()&&ph.length<12)return toast('WhatsApp inválido: use DDD + número');
-  fs.collection('students').doc(id).update({name,turma:$('#et').value.trim(),phone:ph,sports,photo:editPhoto}).catch(err);
+  fs.collection('students').doc(id).update({name,turma:$('#et').value.trim(),phone:ph,sports,photo:editPhoto}).catch(err);syncPortal(Object.assign({},s,{name,sports}));
   closeModal();toast('Aluno atualizado');
 }
 function openCard(s){
@@ -350,6 +379,9 @@ function act(a,v,t){
     case 'skip':fs.collection('pending').doc(v).delete().catch(err);break;
     case 'clearav':st.pending.forEach(p=>fs.collection('pending').doc(p.id).delete().catch(err));break;
     case 'zoom':{const [id,f]=v.split('|'),l=(st.logs[id.slice(0,10)]||{})[id];if(l&&l[f])openModal(`<img src="${l[f]}" alt="" style="width:100%;border-radius:18px;margin-bottom:12px"><button class="btn sec full" data-a="close">Fechar</button>`);break;}
+    case 'sendpais':sendPais(v);break;
+    case 'newcode':newCode(v);break;
+    case 'copylink':if(navigator.clipboard)navigator.clipboard.writeText(portalUrl()).then(()=>toast('Link copiado'),()=>toast('Não consegui copiar'));break;
     case 'login':doLogin();break;
     case 'logout':if(auth)auth.signOut();break;
   }

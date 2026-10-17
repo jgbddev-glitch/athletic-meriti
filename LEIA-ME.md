@@ -1,4 +1,4 @@
-# Athletic Meriti · Check-in e Check-out (versão 2.0.0)
+# Athletic Meriti · Check-in e Check-out (versão 2.2.0)
 
 ## PARTE 1 · Criar o banco na nuvem (Firebase, grátis) · só uma vez
 
@@ -11,12 +11,22 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /portal/{token} {
+      allow get: if true;
+      allow write: if request.auth != null;
+      match /events/{ev} {
+        allow read: if true;
+        allow write: if request.auth != null;
+      }
+    }
     match /{document=**} {
       allow read, write: if request.auth != null;
     }
   }
 }
 ```
+
+(As regras de `portal` permitem que os pais, sem login, vejam só os dados de quem tem a matrícula. Quem já publicou as regras antigas precisa publicar estas.)
 
 5. Menu **Criação → Authentication → Vamos começar → E-mail/senha → Ativar → Salvar**.
 6. Na aba **Usuários → Adicionar usuário**: crie um e-mail e senha. Esta é a **conta dos aparelhos** (não precisa ser e-mail real). Use a mesma conta em todos os celulares e no tablet.
@@ -33,6 +43,19 @@ service cloud.firestore {
 2. No painel, aba **Professores**, cadastre os outros professores. Na aba **+ Aluno**, cadastre os alunos, escolha o esporte (Basquete, Futsal ou os dois) e, se quiser, a foto.
 3. Na aba **Alunos**, toque em 🪪 para ver e imprimir a carteirinha com QR Code.
 4. No tablet da quadra deixe a tela inicial: os alunos tocam na bola do esporte, escolhem o nome e digitam o código (ou leem o QR Code). O app tira a foto e registra.
+
+## PÁGINA DOS PAIS
+
+- Endereço: o mesmo do app, trocando o final por **pais.html** (ex.: `https://seunome.github.io/athletic-meriti/pais.html`). Ele também aparece em **Painel → Ajustes → Página dos pais**.
+- O **código de 4 dígitos** do aluno (o mesmo do check-in, visível na aba **Alunos**) é o acesso dos pais. Eles digitam o código e veem entrada, saída, duração e as fotos do check-in, ao vivo.
+- O botão **📲** do aluno envia pelo WhatsApp o link já com o código.
+- Se o código vazar, abra **Editar** no aluno e toque em **Gerar novo código**: o antigo deixa de funcionar (no check-in e para os pais) e o histórico é mantido.
+- Os pais veem só o primeiro nome do aluno e os últimos 30 registros.
+- Atenção: um código de 4 dígitos tem só 10.000 combinações. Quem insistir em tentar códigos pode acabar vendo dados de outros alunos. Se isso preocupar, peça a versão que exige também o primeiro nome do aluno.
+
+## FOTO NO CHECK-IN
+
+A foto é obrigatória para **entrar**: sem câmera liberada, o check-in não é feito. Na **saída**, a foto também é tirada; só se a câmera falhar tecnicamente o check-out é registrado sem foto, para o aluno não ficar preso como "na quadra".
 
 ## COMO ATUALIZAR O APP NOS CELULARES
 
