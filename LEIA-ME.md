@@ -1,4 +1,4 @@
-# Athletic Meriti · Check-in e Check-out (versão 2.2.0)
+# Athletic Meriti · Check-in e Check-out (versão 2.3.0)
 
 ## PARTE 1 · Criar o banco na nuvem (Firebase, grátis) · só uma vez
 
@@ -53,9 +53,31 @@ service cloud.firestore {
 - Os pais veem só o primeiro nome do aluno e os últimos 30 registros.
 - Atenção: um código de 4 dígitos tem só 10.000 combinações. Quem insistir em tentar códigos pode acabar vendo dados de outros alunos. Se isso preocupar, peça a versão que exige também o primeiro nome do aluno.
 
-## FOTO NO CHECK-IN
+## TELA DE CHECK-IN (versão 2.3)
 
-A foto é obrigatória para **entrar**: sem câmera liberada, o check-in não é feito. Na **saída**, a foto também é tirada; só se a câmera falhar tecnicamente o check-out é registrado sem foto, para o aluno não ficar preso como "na quadra".
+- A tela inicial abre **direto na câmera**: o aluno olha para ela, o app reconhece o rosto, mostra "Entrada em 3… / Saída em 3…" com um botão **Não sou eu**, e registra com a foto tirada na hora.
+- Alternativas: botão **QR Code** (aponta a carteirinha) e botão **Matrícula** (digita os 4 números). Nos dois a foto é tirada em seguida.
+- A foto é obrigatória para **entrar**. Na **saída**, só se a câmera falhar tecnicamente o check-out é registrado sem foto.
+- Os esportes aparecem só no **cadastro** do aluno e na **lista de Alunos**, separada por esporte (quem pratica os dois aparece nas duas listas). Uma presença por aluno por dia.
+
+## CADASTRAR O ROSTO
+
+- Ao cadastrar um aluno, o app abre a câmera e tira 4 amostras do rosto (a pessoa olha para a câmera e vira levemente a cabeça).
+- Para refazer ou cadastrar depois, use o botão **😀** do aluno na aba **Alunos**.
+- Na primeira vez o app baixa os arquivos do reconhecimento facial (cerca de 7 MB, precisa de internet); depois eles ficam guardados no aparelho.
+- O app guarda apenas números que representam o rosto, mas é **dado biométrico de menores**: peça autorização por escrito dos responsáveis (LGPD).
+- Irmãos parecidos podem confundir o reconhecimento. Por isso há a confirmação de 3 segundos com **Não sou eu**.
+
+## COMPARTILHAR QR CODE
+
+- Na carteirinha do aluno (🪪), toque em **Compartilhar** para enviar a imagem (WhatsApp, e-mail etc.).
+- Na aba **Alunos**, **Compartilhar todos os QR Codes** gera as imagens de todos, e **Imprimir carteirinhas** imprime uma folha com todas.
+
+## PÁGINA DOS PAIS NÃO ABRE OU DIZ "NÃO ENCONTRADA"
+
+1. Publique as regras do Firebase que estão neste arquivo (Parte 1, item 4). Sem elas a página mostra "Acesso bloqueado".
+2. Abra o app atualizado em um aparelho **conectado e com internet**: ele cria sozinho o acesso dos pais de todos os alunos já cadastrados.
+3. Use a **matrícula de 4 dígitos** (aparece na aba Alunos).
 
 ## COMO ATUALIZAR O APP NOS CELULARES
 

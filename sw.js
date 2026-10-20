@@ -1,4 +1,4 @@
-const V='am-v2.2.0';
+const V='am-v2.3.0';
 const LOCAL=['./','./index.html','./style.css','./app.js','./manifest.json','./pais.html','./pais.js','./manifest-pais.json','./icon-192.png','./icon-512.png'];
 const CDN=['https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js','https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js','https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js','https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js'];
 self.addEventListener('install',e=>{

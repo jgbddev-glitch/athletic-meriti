@@ -15,40 +15,40 @@ const saveCodes=()=>{try{localStorage.setItem(KEY,JSON.stringify(codes));}catch(
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),2600);}
 
 function header(){return `<header class="top"><div class="brand"><img src="icon-192.png" class="logo" alt=""><div><b>Athletic Meriti</b><small>Área dos pais</small></div></div></header>`;}
-function addForm(){return `<div class="card"><h3>Acompanhe seu filho</h3><p class="hint" style="margin:0 0 12px">Digite o código de 4 dígitos do seu filho (o mesmo usado no check-in) para ver a entrada, a saída e a foto.</p><div class="row"><input id="mat" inputmode="numeric" placeholder="Código de 4 dígitos" autocomplete="off" maxlength="4"><button class="btn" data-a="add">Ver</button></div><div class="bad" id="msg">${esc(msg)}</div></div>`;}
+function addForm(){return `<div class="card"><h3>Acompanhe seu filho</h3><p class="hint" style="margin:0 0 12px">Digite a matrícula de 4 dígitos do seu filho para ver a entrada, a saída e a foto.</p><div class="row"><input id="mat" inputmode="numeric" placeholder="Matrícula (4 números)" autocomplete="off" maxlength="4"><button class="btn" data-a="add">Ver</button></div><div class="bad" id="msg">${esc(msg)}</div></div>`;}
 function kidHtml(code){
   const k=kids[code]||{},p=k.profile,ev=k.events||[];
   if(k.loading)return `<div class="card"><div class="empty">Carregando…</div></div>`;
-  if(!p)return `<div class="card"><h3>Código ${esc(code)}</h3><div class="empty">Código não encontrado ou desativado. Confirme com o clube.</div><button class="btn sec full" data-a="rm" data-v="${code}">Remover</button></div>`;
+  if(!p)return `<div class="card"><h3>Matrícula ${esc(code)}</h3><div class="empty">${k.denied?'Acesso bloqueado: o clube precisa publicar as regras do Firebase para a página dos pais.':'Código não encontrado ou desativado. Confirme com o clube.'}</div><button class="btn sec full" data-a="rm" data-v="${code}">Remover</button></div>`;
   const today=dkey(),last=ev[0],onCourt=last&&last.day===today&&last.in&&!last.out;
   const photo=(src,label,t)=>`<figure>${src?`<img src="${src}" alt="" data-a="zoom" data-v="${src}">`:`<div class="nophoto">📷</div>`}${label} ${t}</figure>`;
-  const list=ev.length?ev.map(e=>{const sp=SPORTS[e.sport]||{name:e.sport,emoji:'🏅',color:'#999'};const d=new Date(e.day+'T12:00:00');
-    return `<div class="li" style="display:block"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div><b>${d.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'2-digit'})}</b><div class="m"><i class="dot" style="background:${sp.color}"></i>${sp.emoji} ${sp.name}${e.in&&e.out?' · '+dur(e.in,e.out):''}</div></div><span class="pill ${e.out?'out':'in'}">${e.out?'Saiu':'Na quadra'}</span></div>
+  const list=ev.length?ev.map(e=>{const sl=(e.sports||(e.sport?[e.sport]:[])).map(x=>SPORTS[x]||{name:x,emoji:'🏅',color:'#999'}),sp=sl[0]||{color:'#999'};const d=new Date(e.day+'T12:00:00');
+    return `<div class="li" style="display:block"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div><b>${d.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'2-digit'})}</b><div class="m"><i class="dot" style="background:${sp.color}"></i>${sl.map(z=>z.emoji+' '+z.name).join(' · ')}${e.in&&e.out?' · '+dur(e.in,e.out):''}</div></div><span class="pill ${e.out?'out':'in'}">${e.out?'Saiu':'Na quadra'}</span></div>
     <div class="ev">${e.in?photo(e.photoIn,'Entrada',hm(e.in)):''}${e.out?photo(e.photoOut,'Saída',hm(e.out)):''}</div></div>`}).join(''):'<div class="empty">Ainda não há registros. Assim que seu filho fizer o primeiro check-in, ele aparece aqui.</div>';
-  return `<div class="card kid"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><h2>${esc(p.first)}</h2><span class="live ${onCourt?'on':'off'}">${onCourt?'● Na quadra agora':'Fora da quadra'}</span></div><div class="m" style="margin:4px 0 10px">${(p.sports||[]).map(x=>`<span class="tag">${(SPORTS[x]||{}).emoji||''} ${(SPORTS[x]||{name:x}).name}</span>`).join('')}Código ${esc(code)}</div>${list}<button class="btn sec sm" data-a="rm" data-v="${code}" style="margin-top:10px">Remover deste aparelho</button></div>`;
+  return `<div class="card kid"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><h2>${esc(p.first)}</h2><span class="live ${onCourt?'on':'off'}">${onCourt?'● Na quadra agora':'Fora da quadra'}</span></div><div class="m" style="margin:4px 0 10px">${(p.sports||[]).map(x=>`<span class="tag">${(SPORTS[x]||{}).emoji||''} ${(SPORTS[x]||{name:x}).name}</span>`).join('')}Matrícula ${esc(code)}</div>${list}<button class="btn sec sm" data-a="rm" data-v="${code}" style="margin-top:10px">Remover deste aparelho</button></div>`;
 }
 function render(){
   const f=document.activeElement,keep=f&&f.id==='mat',val=keep?f.value:'';
-  $('#app').innerHTML=header()+`<main class="page">${codes.map(kidHtml).join('')}${addForm()}<p class="hint" style="text-align:center">As fotos são tiradas na entrada e na saída para a segurança dos alunos. Não compartilhe o código com outras pessoas.</p></main>`;
+  $('#app').innerHTML=header()+`<main class="page">${codes.map(kidHtml).join('')}${addForm()}<p class="hint" style="text-align:center">As fotos são tiradas na entrada e na saída para a segurança dos alunos. Não compartilhe a matrícula com outras pessoas.</p></main>`;
   if(keep){const i=$('#mat');i.value=val;i.focus();}
 }
 function watch(code){
   if(unsubs[code])return;
   kids[code]={loading:true,events:[]};
   const ref=fs.collection('portal').doc(code);
-  const u1=ref.onSnapshot(d=>{kids[code].loading=false;kids[code].profile=d.exists?d.data():null;render();},()=>{kids[code].loading=false;kids[code].profile=null;render();});
+  const u1=ref.onSnapshot(d=>{kids[code].loading=false;kids[code].profile=d.exists?d.data():null;render();},e=>{kids[code].loading=false;kids[code].profile=null;kids[code].denied=!!(e&&e.code==='permission-denied');render();});
   const u2=ref.collection('events').orderBy('ts','desc').limit(30).onSnapshot(sn=>{kids[code].events=sn.docs.map(x=>x.data());render();},()=>{});
   unsubs[code]=()=>{u1();u2();};
 }
 function addCode(raw){
   const c=norm(raw);
-  if(c.length!==4){msg='O código tem 4 números.';render();return;}
-  if(codes.includes(c)){msg='Este código já está na lista.';render();return;}
+  if(c.length!==4){msg='A matrícula tem 4 números.';render();return;}
+  if(codes.includes(c)){msg='Esta matrícula já está na lista.';render();return;}
   msg='Procurando…';render();
   fs.collection('portal').doc(c).get().then(d=>{
-    if(!d.exists){msg='Código não encontrado. Confira com o clube.';render();return;}
+    if(!d.exists){msg='Matrícula não encontrada. Confira com o clube.';render();return;}
     msg='';codes.push(c);saveCodes();watch(c);render();
-  }).catch(()=>{msg='Não consegui consultar. Verifique sua internet.';render();});
+  }).catch(e=>{msg=e&&e.code==='permission-denied'?'Acesso bloqueado: o clube precisa publicar as regras do Firebase para a página dos pais.':'Não consegui consultar. Verifique sua internet.';render();});
 }
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-a]');
