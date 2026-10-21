@@ -128,7 +128,6 @@ input:focus,select:focus{border-color:var(--or)}
 .idcard .qrb svg{width:100%;height:auto;display:block}
 .idcard h3{margin:6px 0 2px;font-size:20px}
 .cbtns{display:flex;gap:8px;margin-top:12px}
-@media print{body *{visibility:hidden}#card,#card *{visibility:visible}#card{position:fixed;left:50%;top:16px;transform:translateX(-50%);width:300px}}
 @media (min-width:700px){.grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}}
 .li .row{flex-wrap:wrap;justify-content:flex-end}
 .ev{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
@@ -151,9 +150,10 @@ input:focus,select:focus{border-color:var(--or)}
 .kbtns .btn{padding:18px 8px;font-size:16px}
 #sheet{display:none}
 @media print{
-  .idcard{background:#fff!important;color:#000!important;border:2px solid #000!important}
+  body.printing{background:#fff!important;color:#000!important}
+  body.printing>*:not(#sheet){display:none!important}
+  body.printing #sheet{display:grid!important;grid-template-columns:repeat(3,1fr);gap:6mm;padding:8mm}
+  .idcard{background:#fff!important;color:#000!important;border:2px solid #000!important;break-inside:avoid;page-break-inside:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .idcard *{color:#000!important}
-  #sheet{display:grid!important;position:absolute;left:0;top:0;width:100%;grid-template-columns:repeat(3,1fr);gap:8px;padding:8px}
-  #sheet,#sheet *{visibility:visible!important}
-  #sheet .idcard{width:auto;break-inside:avoid;margin:0}
+  .idcard .qrb{border:1px solid #000}
 }

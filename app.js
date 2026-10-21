@@ -1,5 +1,5 @@
 'use strict';
-const VERSION='2.3.0';
+const VERSION='2.3.1';
 const IDLE_MS=5*60*1000;
 const FACE_T=0.5;
 const FACE_LIB='https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js';
@@ -289,9 +289,9 @@ function adminHtml(){
   if(T==='alunos'){
     const list=st.students.filter(s=>s.name.toLowerCase().includes(st.aq.toLowerCase()));
     h+=`<div class="card"><input id="aq" placeholder="🔍 Buscar aluno…" value="${esc(st.aq)}" autocomplete="off"></div>
-    <div class="row" style="flex-wrap:wrap"><button class="btn sec sm" data-a="shareall">📤 Compartilhar todos os QR Codes</button><button class="btn sec sm" data-a="printall">🖨 Imprimir carteirinhas</button></div>`;
+    <div class="row" style="flex-wrap:wrap"><button class="btn sec sm" data-a="shareall">📤 Compartilhar todos os QR Codes</button><button class="btn sec sm" data-a="printall">🖨 Imprimir todas as carteirinhas</button></div>`;
     SPORTS.forEach(sp=>{const l=list.filter(s=>has(s,sp.id));
-      h+=`<div class="card"><h3 style="color:${sp.color}">${sp.emoji} ${sp.name} (${l.length})</h3>${l.length?l.map(s=>studentRow(s,adm)).join(''):'<div class="empty">Nenhum aluno neste esporte.</div>'}</div>`;});
+      h+=`<div class="card"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="color:${sp.color}">${sp.emoji} ${sp.name} (${l.length})</span>${l.length?`<button class="btn sm sec" data-a="printsport" data-v="${sp.id}">🖨 Imprimir ${sp.name}</button>`:''}</h3>${l.length?l.map(s=>studentRow(s,adm)).join(''):'<div class="empty">Nenhum aluno neste esporte.</div>'}</div>`;});
   }
   if(T==='cad'){
     h+=`<div class="card"><h3>Novo aluno</h3>
@@ -473,7 +473,7 @@ function cardHtml(s,id){
 }
 function openCard(s){
   st.cardStudent=s;
-  openModal(cardHtml(s,'card')+`<div class="cbtns"><button class="btn full" data-a="shareone">📤 Compartilhar</button><button class="btn sec full" data-a="print">🖨</button></div><button class="btn sec full" data-a="close" style="margin-top:8px">Fechar</button>`);
+  openModal(cardHtml(s,'card')+`<div class="cbtns" style="flex-direction:column"><button class="btn full" data-a="print">🖨 Imprimir esta carteirinha</button><button class="btn sec full" data-a="shareone">📤 Compartilhar imagem</button><button class="btn sec full" data-a="close">Fechar</button></div>`);
 }
 const loadImg=src=>new Promise(ok=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>ok(null);i.src=src;});
 async function cardBlob(s){
@@ -522,12 +522,15 @@ async function doShare(){
   try{if(navigator.canShare&&navigator.canShare(data))await navigator.share(data);else{downloadFiles(st.shareFiles);toast('Baixando as imagens…');}}
   catch(e){if(!e||e.name!=='AbortError'){downloadFiles(st.shareFiles);toast('Não deu para compartilhar tudo junto: baixando as imagens');}}
 }
-function printAll(){
+function printCards(list){
   if(!window.qrcode)return toast('QR Code indisponível. Conecte à internet e tente de novo.');
-  if(!st.students.length)return toast('Nenhum aluno cadastrado');
-  const d=document.createElement('div');d.id='sheet';d.innerHTML=st.students.map(s=>cardHtml(s)).join('');document.body.appendChild(d);
-  const clean=()=>{d.remove();window.removeEventListener('afterprint',clean);};window.addEventListener('afterprint',clean);
-  window.print();
+  if(!list.length)return toast('Nenhum aluno para imprimir');
+  const old=document.getElementById('sheet');if(old)old.remove();
+  const d=document.createElement('div');d.id='sheet';d.innerHTML=list.map(x=>cardHtml(x)).join('');document.body.appendChild(d);
+  document.body.classList.add('printing');
+  const clean=()=>{d.remove();document.body.classList.remove('printing');window.removeEventListener('afterprint',clean);};
+  window.addEventListener('afterprint',clean);
+  setTimeout(()=>window.print(),150);
 }
 
 /* ---------- eventos ---------- */
@@ -550,12 +553,13 @@ function act(a,v,t){
     case 'saveedit':saveEdit(v);break;
     case 'face':{const s=st.students.find(x=>x.id===v);if(s)openFaceEnroll(s,null);break;}
     case 'card':{const s=st.students.find(x=>x.id===v);if(s)openCard(s);break;}
-    case 'print':window.print();break;
+    case 'print':printCards(st.cardStudent?[st.cardStudent]:[]);break;
+    case 'printsport':printCards(st.students.filter(x=>has(x,v)));break;
     case 'shareone':shareOne();break;
     case 'shareall':shareAll();break;
     case 'doshare':doShare();break;
     case 'dlall':downloadFiles(st.shareFiles||[]);break;
-    case 'printall':printAll();break;
+    case 'printall':printCards(st.students);break;
     case 'del':if(st.delId===v){fs.collection('students').doc(v).delete().catch(err);st.delId=null;toast('Aluno excluído');}else st.delId=v;render();break;
     case 'addprof':addProf();break;
     case 'editprof':openProfEdit(v);break;
