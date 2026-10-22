@@ -6,16 +6,16 @@ const p2=n=>String(n).padStart(2,'0');
 const hm=t=>{const d=new Date(t);return p2(d.getHours())+':'+p2(d.getMinutes())};
 const dur=(a,b)=>{const m=Math.max(0,Math.round((b-a)/60000));return m<60?m+' min':Math.floor(m/60)+'h'+p2(m%60)};
 const dkey=(d=new Date())=>d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
-const norm=v=>String(v||'').replace(/\D/g,'').slice(0,4);
+const norm=v=>String(v||'').replace(/\D/g,'').slice(0,6);
 const fmt=m=>m;
-const KEY='am_pais_v3';
+const KEY='am_pais_v4';
 let codes=[],kids={},unsubs={},fs,tt,msg='';
-try{codes=JSON.parse(localStorage.getItem(KEY)||'[]').filter(c=>/^\d{4}$/.test(c));}catch(e){}
+try{codes=JSON.parse(localStorage.getItem(KEY)||'[]').filter(c=>/^\d{6}$/.test(c));}catch(e){}
 const saveCodes=()=>{try{localStorage.setItem(KEY,JSON.stringify(codes));}catch(e){}};
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),2600);}
 
 function header(){return `<header class="top"><div class="brand"><img src="icon-192.png" class="logo" alt=""><div><b>Athletic Meriti</b><small>Área dos pais</small></div></div></header>`;}
-function addForm(){return `<div class="card"><h3>Acompanhe seu filho</h3><p class="hint" style="margin:0 0 12px">Digite a matrícula de 4 dígitos do seu filho para ver a entrada, a saída e a foto.</p><div class="row"><input id="mat" inputmode="numeric" placeholder="Matrícula (4 números)" autocomplete="off" maxlength="4"><button class="btn" data-a="add">Ver</button></div><div class="bad" id="msg">${esc(msg)}</div></div>`;}
+function addForm(){return `<div class="card"><h3>Acompanhe seu filho</h3><p class="hint" style="margin:0 0 12px">Digite a matrícula de 6 dígitos do seu filho para ver a entrada, a saída e a foto.</p><div class="row"><input id="mat" inputmode="numeric" placeholder="Matrícula (6 números)" autocomplete="off" maxlength="6"><button class="btn" data-a="add">Ver</button></div><div class="bad" id="msg">${esc(msg)}</div></div>`;}
 function kidHtml(code){
   const k=kids[code]||{},p=k.profile,ev=k.events||[];
   if(k.loading)return `<div class="card"><div class="empty">Carregando…</div></div>`;
@@ -25,7 +25,7 @@ function kidHtml(code){
   const list=ev.length?ev.map(e=>{const sl=(e.sports||(e.sport?[e.sport]:[])).map(x=>SPORTS[x]||{name:x,emoji:'🏅',color:'#999'}),sp=sl[0]||{color:'#999'};const d=new Date(e.day+'T12:00:00');
     return `<div class="li" style="display:block"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div><b>${d.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'2-digit'})}</b><div class="m"><i class="dot" style="background:${sp.color}"></i>${sl.map(z=>z.emoji+' '+z.name).join(' · ')}${e.in&&e.out?' · '+dur(e.in,e.out):''}</div></div><span class="pill ${e.out?'out':'in'}">${e.out?'Saiu':'Na quadra'}</span></div>
     <div class="ev">${e.in?photo(e.photoIn,'Entrada',hm(e.in)):''}${e.out?photo(e.photoOut,'Saída',hm(e.out)):''}</div></div>`}).join(''):'<div class="empty">Ainda não há registros. Assim que seu filho fizer o primeiro check-in, ele aparece aqui.</div>';
-  return `<div class="card kid"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><h2>${esc(p.first)}</h2><span class="live ${onCourt?'on':'off'}">${onCourt?'● Na quadra agora':'Fora da quadra'}</span></div><div class="m" style="margin:4px 0 10px">${(p.sports||[]).map(x=>`<span class="tag">${(SPORTS[x]||{}).emoji||''} ${(SPORTS[x]||{name:x}).name}</span>`).join('')}Matrícula ${esc(code)}</div>${list}<button class="btn sec sm" data-a="rm" data-v="${code}" style="margin-top:10px">Remover deste aparelho</button></div>`;
+  return `<div class="card kid"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><h2>${esc(p.first)}</h2><span class="live ${onCourt?'on':'off'}">${onCourt?'● Na quadra agora':'Fora da quadra'}</span></div><div class="m" style="margin:4px 0 10px">${(p.sports||[]).map(x=>`<span class="tag">${(SPORTS[x]||{}).emoji||''} ${(SPORTS[x]||{name:x}).name}</span>`).join('')}Matrícula ${esc(code)}</div>${(p.sched||[]).map(x=>`<div class="m" style="margin-bottom:4px">🕒 ${esc(x)}</div>`).join('')}${list}<button class="btn sec sm" data-a="rm" data-v="${code}" style="margin-top:10px">Remover deste aparelho</button></div>`;
 }
 function render(){
   const f=document.activeElement,keep=f&&f.id==='mat',val=keep?f.value:'';
@@ -42,7 +42,7 @@ function watch(code){
 }
 function addCode(raw){
   const c=norm(raw);
-  if(c.length!==4){msg='A matrícula tem 4 números.';render();return;}
+  if(c.length!==6){msg='A matrícula tem 6 números.';render();return;}
   if(codes.includes(c)){msg='Esta matrícula já está na lista.';render();return;}
   msg='Procurando…';render();
   fs.collection('portal').doc(c).get().then(d=>{
@@ -68,7 +68,7 @@ function boot(){
   const m=norm(new URLSearchParams(location.search).get('m'));
   render();
   codes.forEach(watch);
-  if(m&&m.length===4&&!codes.includes(m))addCode(m);
+  if(m&&m.length===6&&!codes.includes(m))addCode(m);
   else if(m&&codes.includes(m))render();
 }
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
