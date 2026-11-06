@@ -1,5 +1,5 @@
 'use strict';
-const VERSION='2.5.0';
+const VERSION='2.5.1';
 const IDLE_MS=5*60*1000;
 const FACE_T=0.5;
 const FACE_LIB='https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js';
@@ -104,7 +104,8 @@ setInterval(()=>{if(st.stage==='app'&&dkey()!==st.today){st.today=dkey();watchDa
 
 /* ---------- consultas ---------- */
 const logId=(day,sid)=>day+'_'+sid;
-const logOf=(sid,day=st.today)=>(st.logs[day]||{})[logId(day,sid)];
+const sessionsOf=(sid,day=st.today)=>Object.values(st.logs[day]||{}).filter(l=>l.sid===sid).sort((a,b)=>a.in-b.in);
+const logOf=(sid,day=st.today)=>{const x=sessionsOf(sid,day);return x[x.length-1];};
 function status(sid,day){const l=logOf(sid,day);return !l?'none':l.out?'out':'in';}
 
 /* ---------- reconhecimento facial ---------- */
@@ -188,7 +189,7 @@ function onDetect(r){
 function snapFrom(v){const c=document.createElement('canvas');c.width=c.height=240;const x=c.getContext('2d');const m=Math.min(v.videoWidth,v.videoHeight);x.drawImage(v,(v.videoWidth-m)/2,(v.videoHeight-m)/2,m,m,0,0,240,240);return c.toDataURL('image/jpeg',0.6);}
 function confirmFace(s){
   const stt=status(s.id),l=logOf(s.id);
-  if(stt==='out'){cool[s.id]=Date.now()+15000;flash('✋','Você já saiu hoje',s.name.split(' ')[0]);return;}
+  if(stt==='out'&&l&&l.out&&Date.now()-l.out<60000){cool[s.id]=Date.now()+15000;setK('Você acabou de sair 😉');return;}
   if(stt==='in'&&l&&Date.now()-l.in<60000){cool[s.id]=Date.now()+15000;setK('Você acabou de entrar 😉');return;}
   st.busy=true;let n=3,ok=false,t;
   openModal(`${avatar(s,96)}<h2>${esc(s.name)}</h2><p>${stt==='in'?'Saída':'Entrada'} em <b id="cd2">3</b>…</p><button class="btn sec full" id="nao">Não sou eu</button>`,()=>{clearInterval(t);st.busy=false;if(!ok)cool[s.id]=Date.now()+15000;});
@@ -240,22 +241,25 @@ function openMat(){
 async function proceed(s){
   if(!s)return;
   const stt=status(s.id);
-  if(stt==='out'){toast('Você já fez check-out hoje 😉');return;}
   st.busy=true;stopKiosk();
   const photo=await capturePhoto();
   st.busy=false;
   if(photo===null){setTimeout(startKiosk,500);return;}
-  if(photo===''&&stt==='none'){toast('Para entrar é preciso liberar a câmera e tirar a foto.');setTimeout(startKiosk,500);return;}
+  if(photo===''&&stt!=='in'){toast('Para entrar é preciso liberar a câmera e tirar a foto.');setTimeout(startKiosk,500);return;}
   toggle(s,photo);setTimeout(startKiosk,800);
 }
 function toggle(s,photo){
-  const now=Date.now(),day=dkey(),id=logId(day,s.id),cur=(st.logs[day]||{})[id],ref=fs.collection('logs').doc(id),first=s.name.split(' ')[0],sports=s.sports||[];
+  const now=Date.now(),day=dkey(),ss=sessionsOf(s.id,day),cur=ss[ss.length-1],first=s.name.split(' ')[0],sports=s.sports||[];
   const em=sports.map(x=>sp_(x).emoji).join('')||'🏅';
-  if(!cur){
-    ref.set({id,day,sid:s.id,sports,in:now,photoIn:photo||''}).catch(err);portalEvent(s,id,{day,sports,in:now,photoIn:photo||'',ts:now},false);
-    flash('✅','Check-in feito!',`Bom treino, ${first} ${em}`,photo);queue(s,'in');
-  }else if(!cur.out){
-    ref.update({out:now,photoOut:photo||''}).catch(err);portalEvent(s,id,{out:now,photoOut:photo||''},true);
+  if(!cur||cur.out){
+    // nova entrada: o aluno pode entrar e sair quantas vezes quiser no dia (cada entrada é uma sessão)
+    const n=ss.length+1,id=n===1?logId(day,s.id):logId(day,s.id)+'_'+n;
+    fs.collection('logs').doc(id).set({id,day,sid:s.id,sports,n,in:now,photoIn:photo||''}).catch(err);
+    portalEvent(s,id,{day,sports,in:now,photoIn:photo||'',ts:now},false);
+    flash('✅',n>1?'Bem-vindo de volta!':'Check-in feito!',`Bom treino, ${first} ${em}`,photo);queue(s,'in');
+  }else{
+    fs.collection('logs').doc(cur.id).update({out:now,photoOut:photo||''}).catch(err);
+    portalEvent(s,cur.id,{out:now,photoOut:photo||''},true);
     flash('👋','Check-out feito!',`Até a próxima, ${first}`,photo);queue(s,'out');
   }
 }
@@ -343,9 +347,9 @@ function adminHtml(){
     const enr=st.students.filter(s=>f==='todos'||has(s,f)).length;
     h+=`<div class="chips" style="margin-bottom:12px"><button class="chip ${f==='todos'?'on':''}" data-a="fsport" data-v="todos">Todos</button>${SPORTS.map(x=>`<button class="chip ${f===x.id?'on':''}" data-a="fsport" data-v="${x.id}" style="--c:${x.color}">${x.emoji} ${x.name}</button>`).join('')}</div>`;
     if(T==='hist')h+=`<div class="card"><input type="date" id="hd" value="${st.hDate}"></div>`;
-    h+=`<div class="card"><h3>${logs.length} presenças · ${Math.max(0,enr-logs.length)} ausências</h3>`;
+    h+=`<div class="card"><h3>${new Set(logs.map(l=>l.sid)).size} presenças · ${Math.max(0,enr-new Set(logs.map(l=>l.sid)).size)} ausências</h3>`;
     h+=logs.length?logs.map(l=>{const s=st.students.find(x=>x.id===l.sid)||{id:l.sid,name:'(aluno removido)'};const sl=logSports(l).map(sp_);
-      return `<div class="li"><div class="lf">${avatar(s,44)}<div><b>${esc(s.name)}</b><div class="m"><i class="dot" style="background:${(sl[0]||{}).color||'#999'}"></i>${sl.map(x=>x.emoji+' '+x.name).join(' · ')} · Entrada ${hm(l.in)}${l.out?` · Saída ${hm(l.out)} · ${dur(l.in,l.out)}`:''}</div></div></div><div class="ph2">${l.photoIn?`<img src="${l.photoIn}" alt="" data-a="zoom" data-v="${l.id}|photoIn">`:''}${l.photoOut?`<img src="${l.photoOut}" alt="" data-a="zoom" data-v="${l.id}|photoOut">`:''}<span class="pill ${l.out?'out':'in'}">${l.out?'Saiu':'Na quadra'}</span></div></div>`}).join(''):'<div class="empty">Nenhum registro neste dia.</div>';
+      return `<div class="li"><div class="lf">${avatar(s,44)}<div><b>${esc(s.name)}</b><div class="m"><i class="dot" style="background:${(sl[0]||{}).color||'#999'}"></i>${sl.map(x=>x.emoji+' '+x.name).join(' · ')} · ${(l.n||1)>1?l.n+'ª entrada':'Entrada'} ${hm(l.in)}${l.out?` · Saída ${hm(l.out)} · ${dur(l.in,l.out)}`:''}</div></div></div><div class="ph2">${l.photoIn?`<img src="${l.photoIn}" alt="" data-a="zoom" data-v="${l.id}|photoIn">`:''}${l.photoOut?`<img src="${l.photoOut}" alt="" data-a="zoom" data-v="${l.id}|photoOut">`:''}<span class="pill ${l.out?'out':'in'}">${l.out?'Saiu':'Na quadra'}</span></div></div>`}).join(''):'<div class="empty">Nenhum registro neste dia.</div>';
     h+='</div>';
     h+=faltasCard(day,f);
   }
@@ -718,7 +722,7 @@ function openReason(id){
 function saveReason(id){const v=(($('#rs')||{}).value||'').trim();fs.collection('absences').doc(id).update({reason:v}).catch(err);closeModal();toast('Motivo salvo');}
 function faltasCard(day,f){
   const logs=st.logs[day]||{};
-  const ab=Object.values(st.abs[day]||{}).filter(a=>!logs[logId(day,a.sid)]).filter(a=>f==='todos'||(a.sports||[]).includes(f));
+  const ab=Object.values(st.abs[day]||{}).filter(a=>!Object.values(logs).some(l=>l.sid===a.sid)).filter(a=>f==='todos'||(a.sports||[]).includes(f));
   let h=`<div class="card"><h3>Faltas (${ab.length})</h3>`;
   h+=ab.length?ab.map(a=>{const s=st.students.find(x=>x.id===a.sid);if(!s)return '';
     return `<div class="li" style="align-items:flex-start"><div class="lf">${avatar(s,40)}<div><b>${esc(s.name)}</b><div class="m">${(a.sports||[]).map(x=>sp_(x).emoji+' '+sp_(x).name).join(' · ')}</div><div class="m">${a.reason?'Motivo: '+esc(a.reason):'Motivo: não informado'}${a.notified?' · ✅ mensagem enviada':''}</div></div></div><div class="row" style="margin:0"><a class="btn sm wa" href="${waUrl({ev:'falta',day:a.day,sid:a.sid,sports:a.sports,ts:a.createdAt},s)}" target="_blank" rel="noopener" data-fsent="${a.id}">💬 Perguntar</a><button class="btn sm sec" data-a="reason" data-v="${a.id}">✏️ Motivo</button></div></div>`}).join(''):'<div class="empty">Nenhuma falta registrada neste dia.</div>';
