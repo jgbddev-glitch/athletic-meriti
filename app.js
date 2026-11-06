@@ -1,5 +1,5 @@
 'use strict';
-const VERSION='2.4.1';
+const VERSION='2.5.0';
 const IDLE_MS=5*60*1000;
 const FACE_T=0.5;
 const FACE_LIB='https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js';
@@ -27,7 +27,7 @@ const DEFAULT_DAYS={basquete:[2,4],futsal:[1,3]};
 const DOW=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const CLOSE_HOUR=20;
 const XLSX_LIB='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
-const ageOf=s=>s&&s.birthYear?new Date().getFullYear()-Number(s.birthYear):null;
+const ageOf=s=>{if(!s)return null;if(s.birthDate){const b=new Date(s.birthDate+'T12:00:00'),n=new Date();let a=n.getFullYear()-b.getFullYear();if(n<new Date(n.getFullYear(),b.getMonth(),b.getDate()))a--;return a;}return s.birthYear?new Date().getFullYear()-Number(s.birthYear):null;};
 const fits=(sl,age)=>age!=null&&age>=sl.age[0]&&age<=sl.age[1];
 const slotLabel=sl=>`${sl.shift} · ${sl.age[0]} a ${sl.age[1]} anos · ${sl.time}`;
 const slotById=(sp,id)=>((SLOTS[sp]||{}).list||[]).find(x=>x.id===id);
@@ -272,7 +272,13 @@ function waUrl(p,s){
 const portalUrl=()=>new URL('pais.html',location.href).href.split('?')[0].split('#')[0];
 function syncPortal(s){if(!s.code)return;fs.collection('portal').doc(s.code).set({first:String(s.name).split(' ')[0],sports:s.sports||[],sched:schedText(s),updated:Date.now()},{merge:true}).catch(err);}
 function portalEvent(s,id,data,merge){if(!s.code)return;const r=fs.collection('portal').doc(s.code).collection('events').doc(id);(merge?r.set(data,{merge:true}):r.set(data)).catch(err);}
-function ensurePortal(){if(portalSynced||!st.students.length)return;portalSynced=true;st.students.forEach(syncPortal);}
+function ensurePortal(){
+  if(portalSynced||!st.students.length)return;portalSynced=true;
+  let last='';try{last=localStorage.getItem('am_psync')||'';}catch(e){}
+  const key=dkey()+':'+st.students.length;if(last===key)return;
+  st.students.forEach(syncPortal);
+  try{localStorage.setItem('am_psync',key);}catch(e){}
+}
 function sendPais(id){
   const s=st.students.find(x=>x.id===id);if(!s)return;
   const msg=`Olá! Acompanhe a entrada e a saída de ${s.name.split(' ')[0]} nos treinos do Athletic Meriti: ${portalUrl()}?m=${s.code}\nMatrícula: ${s.code}`;
@@ -313,7 +319,7 @@ function updateStats(){const a=$('#sin');if(!a)return false;const c=counts();a.t
 function sportChips(sel){return `<div class="chips">${SPORTS.map(x=>`<button class="chip ${sel.includes(x.id)?'on':''}" data-a="chip" data-v="${x.id}" style="--c:${x.color}">${x.emoji} ${x.name}</button>`).join('')}</div>`;}
 function studentRow(s,adm,only){
   const age=ageOf(s),sch=schedText(s,only);
-  return `<div class="li" style="align-items:flex-start"><div class="lf">${avatar(s,44)}<div><b>${esc(s.name)}</b>${age!=null?` <span class="m">· ${age} anos</span>`:''}<div class="m">${(s.sports||[]).map(x=>`<span class="tag">${sp_(x).emoji} ${sp_(x).name}</span>`).join('')}Matrícula <b>${esc(s.code)}</b>${(s.faces||[]).length?' · 😀':' · sem rosto'}</div>${sch.map(x=>`<div class="m">🕒 ${esc(x)}</div>`).join('')}${s.guardian?`<div class="m">Resp.: ${esc(s.guardian)}${s.phone?' · '+esc(fmtPhone(s.phone)):''}</div>`:''}${s.guardian2?`<div class="m">Resp. 2: ${esc(s.guardian2)}${s.phone2?' · '+esc(fmtPhone(s.phone2)):''}</div>`:''}${s.studentPhone?`<div class="m">Aluno: ${esc(fmtPhone(s.studentPhone))}</div>`:''}</div></div><div class="row" style="margin:0"><button class="btn sm sec" data-a="face" data-v="${s.id}">😀</button><button class="btn sm sec" data-a="sendpais" data-v="${s.id}">📲</button><button class="btn sm sec" data-a="card" data-v="${s.id}">🪪</button><button class="btn sm sec" data-a="edit" data-v="${s.id}">Editar</button>${adm?`<button class="btn sm ${st.delId===s.id?'red':'sec'}" data-a="del" data-v="${s.id}">${st.delId===s.id?'Confirmar?':'🗑'}</button>`:''}</div></div>`;
+  return `<div class="li" style="align-items:flex-start"><div class="lf">${avatar(s,44)}<div><b>${esc(s.name)}</b>${age!=null?` <span class="m">· ${age} anos</span>`:''}<div class="m">${(s.sports||[]).map(x=>`<span class="tag">${sp_(x).emoji} ${sp_(x).name}</span>`).join('')}Matrícula <b>${esc(s.code)}</b>${(s.faces||[]).length?' · 😀':' · sem rosto'}</div>${sch.map(x=>`<div class="m">🕒 ${esc(x)}</div>`).join('')}${s.guardian?`<div class="m">Resp.: ${esc(s.guardian)}${s.phone?' · '+esc(fmtPhone(s.phone)):''}</div>`:''}${s.guardian2?`<div class="m">Resp. 2: ${esc(s.guardian2)}${s.phone2?' · '+esc(fmtPhone(s.phone2)):''}</div>`:''}${s.studentPhone?`<div class="m">Aluno: ${esc(fmtPhone(s.studentPhone))}</div>`:''}${missingOf(s).length?`<div class="m" style="color:var(--or);font-weight:700">⚠ Completar: ${missingOf(s).join(', ')}</div>`:''}</div></div><div class="row" style="margin:0"><button class="btn sm sec" data-a="face" data-v="${s.id}">😀</button><button class="btn sm sec" data-a="sendpais" data-v="${s.id}">📲</button><button class="btn sm sec" data-a="card" data-v="${s.id}">🪪</button><button class="btn sm sec" data-a="edit" data-v="${s.id}">Editar</button>${adm?`<button class="btn sm ${st.delId===s.id?'red':'sec'}" data-a="del" data-v="${s.id}">${st.delId===s.id?'Confirmar?':'🗑'}</button>`:''}</div></div>`;
 }
 function adminHtml(){
   const adm=st.prof.role==='admin';
@@ -346,9 +352,10 @@ function adminHtml(){
   if(T==='alunos'){
     const list=st.students.filter(s=>s.name.toLowerCase().includes(st.aq.toLowerCase()));
     h+=`<div class="card"><input id="aq" placeholder="🔍 Buscar aluno…" value="${esc(st.aq)}" autocomplete="off"></div>
-    <div class="row" style="flex-wrap:wrap"><button class="btn sec sm" data-a="shareall">📤 Compartilhar todos os QR Codes</button><button class="btn sec sm" data-a="printall">🖨 Imprimir todas as carteirinhas</button></div>`;
+    <div class="m" style="margin:0 0 8px">${st.students.length} alunos${st.students.filter(x=>missingOf(x).length).length?` · <b style="color:var(--or)">${st.students.filter(x=>missingOf(x).length).length} com cadastro a completar</b>`:''}</div>
+    <div class="row" style="flex-wrap:wrap">${adm?'<button class="btn sm" data-a="import">📥 Importar alunos</button>':''}<button class="btn sec sm" data-a="shareall">📤 Compartilhar todos os QR Codes</button><button class="btn sec sm" data-a="printall">🖨 Imprimir todas as carteirinhas</button></div>`;
     SPORTS.forEach(sp=>{const l=list.filter(s=>has(s,sp.id));
-      h+=`<div class="card"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="color:${sp.color}">${sp.emoji} ${sp.name} (${l.length})</span>${l.length?`<button class="btn sm sec" data-a="printsport" data-v="${sp.id}">🖨 Imprimir ${sp.name}</button>`:''}</h3>${l.length?l.map(s=>studentRow(s,adm,sp.id)).join(''):'<div class="empty">Nenhum aluno neste esporte.</div>'}</div>`;});
+      h+=`<div class="card"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="color:${sp.color}">${sp.emoji} ${sp.name} (${l.length})</span>${l.length?`<button class="btn sm sec" data-a="printsport" data-v="${sp.id}">🖨 Imprimir ${sp.name}</button>`:''}</h3>${l.length?l.slice(0,(st.aq||st.showAll)?l.length:50).map(s=>studentRow(s,adm,sp.id)).join(''):'<div class="empty">Nenhum aluno neste esporte.</div>'}${(!st.aq&&!st.showAll&&l.length>50)?`<button class="btn sec full" data-a="showall" style="margin-top:10px">Mostrar todos os ${l.length}</button>`:''}</div>`;});
   }
   if(T==='cad'){
     h+=`<div class="card"><h3>Novo aluno</h3>${formHtml('c',{})}
@@ -363,6 +370,7 @@ function adminHtml(){
   if(T==='rel')h+=relTab();
   if(T==='cfg'){
     h+=trainDaysCard(adm);
+    h+=fromCard(adm);
     h+=`<div class="card"><h3>Meu acesso</h3><button class="btn sec full" data-a="editprof" data-v="${st.prof.id}">Trocar meu nome ou PIN</button></div>
     <div class="card"><h3>Página dos pais</h3><p class="hint" style="margin:0 0 10px">Os pais abrem este endereço e digitam a matrícula de 6 dígitos do filho (aba Alunos). O botão 📲 do aluno já envia o link com a matrícula.</p><div class="fld"><input id="pl" readonly value="${esc(portalUrl())}"></div><button class="btn sec full" data-a="copylink">Copiar link</button></div>
     <div class="card"><h3>Este aparelho</h3><p class="hint" style="margin:0 0 10px">Versão ${VERSION}. O professor é bloqueado sozinho após 5 minutos sem uso.</p><button class="btn red full" data-a="logout">Desconectar este aparelho</button></div>`;
@@ -481,21 +489,22 @@ function formHtml(sc,s){
   <div id="${sc}_slots">${slotPickers(sel,age,s.slots||{})}</div>`;
 }
 function readForm(sc){
+  const strict=sc==='c';
   const g=id=>(($('#'+sc+'_'+id)||{}).value||'').trim();
   const name=g('name');if(!name)return {err:'Digite o nome do aluno'};
-  const y=parseInt(g('year'),10),cy=new Date().getFullYear();
-  if(!(y>=cy-25&&y<=cy-3))return {err:'Informe o ano de nascimento com 4 números'};
+  const cy=new Date().getFullYear(),y=parseInt(g('year'),10);
+  if(strict||g('year')){if(!(y>=cy-25&&y<=cy-3))return {err:'Informe o ano de nascimento com 4 números'};}
   const guardian=g('guardian'),phone=normPhone(g('phone'));
-  if(!guardian)return {err:'Digite o nome do responsável'};
-  if(phone.length<12)return {err:'Celular do responsável inválido: use DDD + número'};
+  if(strict&&!guardian)return {err:'Digite o nome do responsável'};
+  if((strict||g('phone'))&&phone.length<12)return {err:'Celular do responsável inválido: use DDD + número'};
   const sph=normPhone(g('sphone')),ph2=normPhone(g('phone2'));
   if(g('sphone')&&sph.length<12)return {err:'Celular do aluno inválido: use DDD + número'};
   if(g('phone2')&&ph2.length<12)return {err:'Celular do responsável 2 inválido: use DDD + número'};
   const sports=[...document.querySelectorAll('#'+sc+'_sp .chip.on')].map(x=>x.dataset.v);
   if(!sports.length)return {err:'Escolha ao menos um esporte'};
   const slots={};
-  for(const id of sports){const el=document.querySelector(`#${sc}_slots select[data-slot="${id}"]`);if(!el||!el.value)return {err:'Escolha o horário de '+sp_(id).name};slots[id]=el.value;}
-  return {data:{name,birthYear:y,guardian,phone,guardian2:g('guardian2'),phone2:ph2,studentPhone:sph,sports,slots}};
+  for(const id of sports){const el=document.querySelector(`#${sc}_slots select[data-slot="${id}"]`);if(el&&el.value)slots[id]=el.value;else if(strict)return {err:'Escolha o horário de '+sp_(id).name};}
+  return {data:{name,birthYear:isNaN(y)?null:y,guardian,phone,guardian2:g('guardian2'),phone2:ph2,studentPhone:sph,sports,slots}};
 }
 function saveNewStudent(){
   const r=readForm('c');if(r.err)return toast(r.err);
@@ -515,7 +524,8 @@ function openEdit(id){
 function saveEdit(id){
   const s=st.students.find(x=>x.id===id);if(!s)return;
   const r=readForm('e');if(r.err)return toast(r.err);
-  fs.collection('students').doc(id).update(Object.assign({},r.data,{photo:editPhoto})).catch(err);
+  const keepBD=s.birthDate&&String(s.birthDate).slice(0,4)===String(r.data.birthYear)?s.birthDate:'';
+  fs.collection('students').doc(id).update(Object.assign({},r.data,{photo:editPhoto,birthDate:keepBD})).catch(err);
   syncPortal(Object.assign({},s,r.data));
   closeModal();toast('Aluno atualizado');
 }
@@ -729,6 +739,64 @@ function trainDaysCard(adm){
 }
 function saveDays(){const o={};SPORTS.forEach(sp=>{o[sp.id]=[...document.querySelectorAll('#td_'+sp.id+' .chip.on')].map(x=>+x.dataset.v);});fs.collection('settings').doc('trainDays').set(o).catch(err);toast('Dias de treino salvos');}
 
+/* ---------- importação de alunos (arquivo gerado a partir das planilhas) ---------- */
+const normName=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+function missingOf(s){
+  const m=[];
+  if(!s.birthYear)m.push('nascimento');
+  if(!s.guardian)m.push('responsável');
+  if(!s.phone)m.push('celular do responsável');
+  (s.sports||[]).forEach(sp=>{if(!(s.slots||{})[sp])m.push('horário de '+sp_(sp).name);});
+  return m;
+}
+function openImport(){
+  openModal(`<h2>Importar alunos</h2><p>Escolha o arquivo <b>alunos-para-importar.json</b> que está no seu celular.</p><label class="btn full" style="cursor:pointer;display:block">Escolher arquivo<input type="file" id="impf" accept=".json,application/json" style="display:none"></label><button class="btn sec full" data-a="close" style="margin-top:8px">Cancelar</button>`);
+}
+async function handleImport(file){
+  let data;try{data=JSON.parse(await file.text());}catch(e){toast('Não consegui ler este arquivo');return;}
+  if(!data||data.formato!=='athletic-meriti-import'||!Array.isArray(data.alunos)){toast('Este não é o arquivo de importação do Athletic Meriti');return;}
+  const have=new Set(st.students.map(s=>normName(s.name)));
+  const novos=data.alunos.filter(a=>a&&a.nome&&!have.has(normName(a.nome)));
+  st.importPlan=novos;
+  const cnt=f=>novos.filter(f).length,both=cnt(a=>(a.esportes||[]).length>1);
+  const inc=cnt(a=>!a.nascimento||!a.responsavel||!a.telResponsavel);
+  openModal(`<h2>Pronto para importar</h2><p>${novos.length} aluno(s) novo(s) · ${data.alunos.length-novos.length} já cadastrado(s), ignorado(s)</p>
+  <div class="m" style="text-align:left;margin-bottom:12px;line-height:1.7">🏀 Basquete: <b>${cnt(a=>(a.esportes||[]).includes('basquete'))}</b><br>⚽ Futsal: <b>${cnt(a=>(a.esportes||[]).includes('futsal'))}</b><br>Nos dois esportes: <b>${both}</b><br>Com dado a completar depois: <b>${inc}</b></div>
+  <p class="hint" style="margin-bottom:12px">Os horários não vêm da planilha. Depois, edite cada aluno e escolha o horário. Cada aluno recebe uma matrícula de 6 dígitos.</p>
+  ${novos.length?`<button class="btn full" data-a="doimport">Cadastrar ${novos.length} aluno(s)</button>`:''}<button class="btn sec full" data-a="close" style="margin-top:8px">${novos.length?'Cancelar':'Fechar'}</button>`);
+}
+async function doImport(){
+  const list=st.importPlan||[];if(!list.length){closeModal();return;}
+  openModal(`<h2>Importando…</h2><p id="impp">0 de ${list.length}</p>`);
+  const used=new Set(st.students.map(s=>s.code)),now=Date.now();
+  const docs=list.map((a,i)=>{let c;do{c=gen6();}while(used.has(c));used.add(c);
+    const by=a.nascimento?parseInt(String(a.nascimento).slice(0,4),10):null;
+    return {id:'s'+now.toString(36)+i.toString(36)+Math.random().toString(36).slice(2,5),name:a.nome,birthDate:a.nascimento||'',birthYear:by||null,guardian:a.responsavel||'',phone:a.telResponsavel||'',guardian2:'',phone2:a.telResponsavel2||'',studentPhone:a.telAluno||'',sports:a.esportes||[],slots:{},photo:'',code:c,faces:[],createdBy:'Importação',createdAt:now};});
+  try{
+    for(let i=0;i<docs.length;i+=200){
+      const b=fs.batch();
+      docs.slice(i,i+200).forEach(s=>{b.set(fs.collection('students').doc(s.id),s);b.set(fs.collection('portal').doc(s.code),{first:String(s.name).split(' ')[0],sports:s.sports,sched:[],updated:now},{merge:true});});
+      await b.commit();
+      const e=$('#impp');if(e)e.textContent=`${Math.min(i+200,docs.length)} de ${docs.length}`;
+    }
+  }catch(e){closeModal();err(e);return;}
+  st.importPlan=null;
+  const cur=(st.settings.closing||{}).from||'';
+  const t=new Date();t.setDate(t.getDate()+1);
+  openModal(`<h2>✅ ${docs.length} alunos cadastrados</h2><p>Quando o uso real do app vai começar? As faltas automáticas só contam a partir dessa data.</p><div class="fld"><input type="date" id="cfrom2" value="${cur&&cur>dkey(t)?cur:dkey(t)}"></div><button class="btn full" data-a="savefrom2">Salvar data e concluir</button>`);
+}
+function saveFrom(id){
+  const v=(($('#'+id)||{}).value||'');if(!v)return toast('Escolha a data');
+  fs.collection('settings').doc('closing').set({from:v}).catch(err);st.settings.closing={from:v};
+  if(id==='cfrom2')closeModal();toast('Contagem de faltas a partir de '+fmtDate(v));
+}
+
+function fromCard(adm){
+  if(!adm)return '';
+  const from=(st.settings.closing||{}).from||'';
+  return `<div class="card"><h3>Início da contagem de faltas</h3><p class="hint" style="margin:0 0 10px">As faltas automáticas só valem a partir desta data. Escolha o primeiro dia de uso real do app.</p><div class="fld"><input type="date" id="cfrom" value="${esc(from)}"></div><button class="btn full" data-a="savefrom">Salvar data</button></div>`;
+}
+
 /* ---------- eventos ---------- */
 function act(a,v,t){
   switch(a){
@@ -773,6 +841,11 @@ function act(a,v,t){
     case 'reason':openReason(v);break;
     case 'savereason':saveReason(v);break;
     case 'savedays':saveDays();break;
+    case 'showall':st.showAll=true;render();break;
+    case 'import':openImport();break;
+    case 'doimport':doImport();break;
+    case 'savefrom':saveFrom('cfrom');break;
+    case 'savefrom2':saveFrom('cfrom2');break;
     case 'login':doLogin();break;
     case 'logout':stopKiosk();if(auth)auth.signOut();break;
   }
@@ -797,6 +870,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('input',e=>{if(e.target.id==='aq'){st.aq=e.target.value;render();}if(/^[ce]_year$/.test(e.target.id))refreshSlots(e.target.id[0]);});
 document.addEventListener('change',e=>{
   const i=e.target;
+  if(i.id==='impf'&&i.files[0])handleImport(i.files[0]);
   if(i.id==='rd'){st.rDate=i.value||dkey();render();}
   if(i.id==='hd'){st.hDate=i.value||dkey();watchDay('hist',st.hDate);render();}
   if(i.id==='ph'&&i.files[0])readPhoto(i.files[0],d=>{st.newPhoto=d;$('#prev').innerHTML=`<img src="${d}" alt="">`;});
