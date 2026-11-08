@@ -1,5 +1,5 @@
 'use strict';
-const VERSION='2.6.0';
+const VERSION='2.6.1';
 const IDLE_MS=5*60*1000;
 const FACE_T=0.5;
 const FACE_LIB='https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js';
@@ -69,7 +69,7 @@ function stopCam(){if(camStream){camStream.getTracks().forEach(t=>t.stop());camS
 function err(e){console.error(e);toast(e&&e.code==='permission-denied'?'Sem permissão no banco: confira as regras do Firestore':'Erro de sincronização. Tente novamente.');}
 function bumpIdle(){clearTimeout(idleT);if(st.prof)idleT=setTimeout(lockProf,IDLE_MS);}
 function lockProf(){if(!st.prof)return;st.prof=null;st.view='home';render();toast('Área do professor bloqueada por inatividade');}
-const getCam=()=>navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:640}},audio:false});
+const getCam=f=>navigator.mediaDevices.getUserMedia({video:{facingMode:f==='environment'?{ideal:'environment'}:'user',width:{ideal:640},height:{ideal:640}},audio:false});
 
 /* ---------- Firebase ---------- */
 function boot(){
@@ -367,7 +367,7 @@ function adminHtml(){
   }
   if(T==='cad'){
     h+=`<div class="card"><h3>Novo aluno</h3>${formHtml('c',{})}
-    <div class="row"><div id="prev" class="av" style="margin:0;background:var(--card2);color:var(--mut)">${st.newPhoto?`<img src="${st.newPhoto}" alt="">`:'📷'}</div><label class="btn sec" style="cursor:pointer">Foto do aluno<input type="file" id="ph" accept="image/*" style="display:none"></label></div>
+    <div class="row" style="flex-wrap:wrap"><div id="prev" class="av" style="margin:0;background:var(--card2);color:var(--mut)">${st.newPhoto?`<img src="${st.newPhoto}" alt="">`:'📷'}</div><label class="btn sec" style="cursor:pointer">📷 Tirar foto<input type="file" id="ph" accept="image/*" capture="environment" style="display:none"></label><label class="btn sec" style="cursor:pointer">🖼 Galeria<input type="file" id="ph2" accept="image/*" style="display:none"></label></div>
     <button class="btn full" data-a="addstudent">Cadastrar aluno</button><p class="hint">Depois de cadastrar, o app pede para registrar o rosto do aluno na câmera. A matrícula de 6 dígitos serve para o check-in e para os pais acompanharem. Os horários marcados com ✓ são os indicados para a idade.</p></div>`;
   }
   if(T==='profs'&&adm){
@@ -529,7 +529,7 @@ function saveNewStudent(){
 }
 function openEdit(id){
   const s=st.students.find(x=>x.id===id);if(!s)return;editPhoto=s.photo||'';
-  openModal(`<h2>Editar aluno</h2><div class="row" style="margin-top:12px"><div id="eprev">${avatar(s,56)}</div><label class="btn sec" style="cursor:pointer">Trocar foto<input type="file" id="eph" accept="image/*" style="display:none"></label></div>
+  openModal(`<h2>Editar aluno</h2><div class="row" style="margin-top:12px;flex-wrap:wrap"><div id="eprev">${avatar(s,56)}</div><label class="btn sec" style="cursor:pointer">📷 Tirar foto<input type="file" id="eph" accept="image/*" capture="environment" style="display:none"></label><label class="btn sec" style="cursor:pointer">🖼 Galeria<input type="file" id="eph2" accept="image/*" style="display:none"></label></div>
   <div style="text-align:left">${formHtml('e',s)}</div>
   <p class="hint" style="margin-bottom:10px;text-align:left">Matrícula (check-in e acesso dos pais): <b>${esc(s.code)}</b></p><button class="btn sm sec" data-a="newcode" data-v="${s.id}" style="margin-bottom:12px">Gerar nova matrícula</button>
   <button class="btn full" data-a="saveedit" data-v="${s.id}">Salvar</button><button class="btn sec full" data-a="close" style="margin-top:8px">Cancelar</button>`);
@@ -549,11 +549,20 @@ async function openFaceEnroll(s,after){
   st.busy=true;stopKiosk();
   toast('Preparando o reconhecimento facial…');
   if(!(await loadFace())){toast('Não consegui carregar o reconhecimento facial (precisa de internet na primeira vez).');end();return;}
-  let stream;try{stream=await getCam();}catch(e){toast('Libere a permissão da câmera');end();return;}
+  let facing='environment';try{facing=localStorage.getItem('am_enroll_cam')||'environment';}catch(e){}
+  let stream;try{stream=await getCam(facing);}catch(e){try{facing='user';stream=await getCam('user');}catch(e2){toast('Libere a permissão da câmera');end();return;}}
   camStream=stream;let alive=true,finished=false,samples=[],photo='';
   const dots=()=>`<div class="dots">${[0,1,2,3].map(i=>`<i class="${i<samples.length?'f':''}"></i>`).join('')}</div>`;
-  openModal(`<h2>Cadastrar rosto</h2><p>${esc(s.name.split(' ')[0])}, olhe para a câmera e vire levemente a cabeça</p><div class="vid mirror"><video id="fv" playsinline muted autoplay></video></div><div id="fd">${dots()}</div><button class="btn sec full" id="fc">${after?'Fazer depois':'Cancelar'}</button>`,()=>{alive=false;stopCam();if(!finished)end();});
+  openModal(`<h2>Cadastrar rosto</h2><p>${esc(s.name.split(' ')[0])}, olhe para a câmera e vire levemente a cabeça</p><div class="vid${facing==='user'?' mirror':''}" id="fvbox"><video id="fv" playsinline muted autoplay></video></div><div id="fd">${dots()}</div><button class="btn sec full" id="fsw" style="margin-bottom:8px">🔄 Trocar câmera (traseira/frontal)</button><button class="btn sec full" id="fc">${after?'Fazer depois':'Cancelar'}</button>`,()=>{alive=false;stopCam();if(!finished)end();});
   $('#fc').onclick=()=>closeModal();
+  $('#fsw').onclick=async()=>{
+    const nf=facing==='user'?'environment':'user';let ns;
+    try{ns=await getCam(nf);}catch(e){toast('Não consegui abrir a outra câmera');return;}
+    stopCam();facing=nf;try{localStorage.setItem('am_enroll_cam',nf);}catch(e){}
+    camStream=ns;const v2=$('#fv');if(v2){v2.srcObject=ns;await v2.play().catch(()=>{});}
+    const bx=$('#fvbox');if(bx)bx.classList.toggle('mirror',nf==='user');
+    samples=[];const d=$('#fd');if(d)d.innerHTML=dots();
+  };
   const v=$('#fv');v.srcObject=stream;await v.play().catch(()=>{});
   const loop=async()=>{
     if(!alive)return;
@@ -887,8 +896,8 @@ document.addEventListener('change',e=>{
   if(i.id==='impf'&&i.files[0])handleImport(i.files[0]);
   if(i.id==='rd'){st.rDate=i.value||dkey();render();}
   if(i.id==='hd'){st.hDate=i.value||dkey();watchDay('hist',st.hDate);render();}
-  if(i.id==='ph'&&i.files[0])readPhoto(i.files[0],d=>{st.newPhoto=d;$('#prev').innerHTML=`<img src="${d}" alt="">`;});
-  if(i.id==='eph'&&i.files[0])readPhoto(i.files[0],d=>{editPhoto=d;$('#eprev').innerHTML=`<div class="av" style="width:56px;height:56px;margin:0"><img src="${d}" alt=""></div>`;});
+  if((i.id==='ph'||i.id==='ph2')&&i.files[0])readPhoto(i.files[0],d=>{st.newPhoto=d;$('#prev').innerHTML=`<img src="${d}" alt="">`;});
+  if((i.id==='eph'||i.id==='eph2')&&i.files[0])readPhoto(i.files[0],d=>{editPhoto=d;$('#eprev').innerHTML=`<div class="av" style="width:56px;height:56px;margin:0"><img src="${d}" alt=""></div>`;});
 });
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.target.id==='lp'||e.target.id==='le'))doLogin();});
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
