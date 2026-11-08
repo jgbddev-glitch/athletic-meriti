@@ -1,5 +1,5 @@
 'use strict';
-const VERSION='2.5.1';
+const VERSION='2.6.0';
 const IDLE_MS=5*60*1000;
 const FACE_T=0.5;
 const FACE_LIB='https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js';
@@ -57,7 +57,7 @@ const logSports=l=>l.sports||(l.sport?[l.sport]:[]);
 
 /* ---------- estado ---------- */
 const st={stage:'boot',students:[],profs:[],pending:[],logs:{},prof:null,view:'home',aq:'',aTab:'hoje',hDate:dkey(),today:dkey(),fSport:'todos',delId:null,newPhoto:'',busy:false,profsLoaded:false,abs:{},closed:{},settings:{},ready:{},rDate:dkey()};
-let auth,fs,subs={},idleT,flT,tt,pad=null,cleanup=null,camStream=null,editPhoto='',portalSynced=false,faceP=null,cool={},closeT=null;
+let auth,fs,subs={},idleT,flT,tt,pad=null,cleanup=null,camStream=null,editPhoto='',portalSynced=false,faceP=null,cool={},closeT=null,faceT=null;
 const kcam={running:false,stream:null,timer:null,streak:{sid:null,n:0},miss:0,wake:null};
 
 /* ---------- utilidades de UI ---------- */
@@ -146,7 +146,7 @@ function stopKiosk(){
   if(kcam.wake){try{kcam.wake.release();}catch(e){}kcam.wake=null;}
 }
 async function startKiosk(){
-  if(kcam.running||st.stage!=='app'||st.busy||(st.view==='admin'&&st.prof))return;
+  if(kcam.running||st.stage!=='app'||st.busy||st.view!=='face')return;
   if($('#modal').classList.contains('show'))return;
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){setK('Câmera indisponível neste aparelho. Use o QR Code ou a matrícula.');return;}
   kcam.running=true;setK('Iniciando câmera…');
@@ -195,7 +195,7 @@ function confirmFace(s){
   openModal(`${avatar(s,96)}<h2>${esc(s.name)}</h2><p>${stt==='in'?'Saída':'Entrada'} em <b id="cd2">3</b>…</p><button class="btn sec full" id="nao">Não sou eu</button>`,()=>{clearInterval(t);st.busy=false;if(!ok)cool[s.id]=Date.now()+15000;});
   $('#nao').onclick=()=>closeModal();
   t=setInterval(()=>{n--;if(n>0){const e=$('#cd2');if(e)e.textContent=n;return;}
-    clearInterval(t);const v=kvideo();const photo=v&&v.videoWidth?snapFrom(v):'';ok=true;cool[s.id]=Date.now()+15000;closeModal();toggle(s,photo);},1000);
+    clearInterval(t);const v=kvideo();const photo=v&&v.videoWidth?snapFrom(v):'';ok=true;cool[s.id]=Date.now()+15000;closeModal();toggle(s,photo);setTimeout(()=>{if(st.view==='face'){st.view='home';render();}},400);},1000);
 }
 
 /* ---------- câmera: foto e QR ---------- */
@@ -311,14 +311,18 @@ function migrateCodes(){
 
 /* ---------- telas ---------- */
 function setupHtml(){return `<div class="setup card"><h2>⚙️ Falta configurar</h2>${window.firebase?'<p>Abra o arquivo <code>firebase-config.js</code> e cole os dados do seu projeto Firebase. O passo a passo está no <b>LEIA-ME.md</b>.</p>':'<p>Não consegui carregar os componentes. Conecte à internet e abra novamente (só na primeira vez).</p>'}</div>`;}
-function loginHtml(){return `<div class="auth"><img class="logo big" src="icon-192.png" alt=""><h1>Athletic Meriti</h1><p>Entre com a conta deste aparelho</p><div class="fld"><input id="le" type="email" placeholder="E-mail" autocomplete="username"></div><div class="fld"><input id="lp" type="password" placeholder="Senha" autocomplete="current-password"></div><div class="bad" id="lerr"></div><button class="btn full" data-a="login">Entrar</button><p class="hint">Isso é feito uma vez por aparelho. Depois ele fica conectado.</p></div>`;}
+function loginHtml(){return `<div class="auth"><img class="hero-logo" src="logo.png" alt="Athletic Meriti"><h1>Athletic Meriti</h1><p>Entre com a conta deste aparelho</p><div class="fld"><input id="le" type="email" placeholder="E-mail" autocomplete="username"></div><div class="fld"><input id="lp" type="password" placeholder="Senha" autocomplete="current-password"></div><div class="bad" id="lerr"></div><button class="btn full" data-a="login">Entrar</button><p class="hint">Isso é feito uma vez por aparelho. Depois ele fica conectado.</p></div>`;}
 function topbar(){return `<header class="top"><div class="brand" data-a="home"><img src="icon-192.png" class="logo" alt=""><div><b>Athletic Meriti</b><small>Check-in &amp; check-out</small></div></div><div class="tr">${st.prof?`<span class="who">👤 ${esc(st.prof.name)}</span><button class="pbtn" data-a="panel">Painel</button><button class="pbtn ghost" data-a="lock">Sair</button>`:`<button class="pbtn" data-a="prof">🔒 Professor</button>`}</div></header>`;}
 function footer(){return `<div class="foot">v${VERSION} · ${navigator.onLine?'🟢 online':'🟠 offline: sincroniza quando a internet voltar'}</div>`;}
 const counts=()=>({inn:st.students.filter(s=>status(s.id)==='in').length,out:st.students.filter(s=>status(s.id)==='out').length,all:st.students.length});
 function homeHtml(){const c=counts();
-  return `<div class="kiosk"><h1 class="kh">Olhe para a <span>câmera</span></h1><div id="camslot" class="camslot"></div>
-  <div class="kbtns"><button class="btn qr" data-a="qr">📷 QR Code</button><button class="btn" data-a="mat">🔢 Matrícula</button></div>
+  return `<div class="home"><img class="hero-logo" src="logo.png" alt="Athletic Meriti">
+  <h1 class="welcome">Bem-vindo, <span>atleta!</span></h1>
+  <button class="bigface" data-a="facecheck"><span class="fi"><svg viewBox="0 0 64 64" width="64" height="64" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 22v-8a4 4 0 0 1 4-4h8M42 10h8a4 4 0 0 1 4 4v8M54 42v8a4 4 0 0 1-4 4h-8M22 54h-8a4 4 0 0 1-4-4v-8"/><circle cx="24" cy="28" r="2.5" fill="#fff"/><circle cx="40" cy="28" r="2.5" fill="#fff"/><path d="M24 40c4 4 12 4 16 0"/></svg></span><span class="ft"><b>Reconhecimento facial</b><small>Toque e olhe para a câmera</small></span></button>
+  <div class="alt-title">Outras formas de entrar</div>
+  <div class="altrow"><button class="altbtn" data-a="qr">📷 QR Code</button><button class="altbtn" data-a="mat">🔢 Matrícula</button></div>
   <div class="stats"><div class="stat g"><b id="sin">${c.inn}</b><span>Na quadra</span></div><div class="stat b"><b id="sout">${c.out}</b><span>Já saíram</span></div><div class="stat o"><b id="sall">${c.all}</b><span>Alunos</span></div></div></div>`;}
+function faceHtml(){return `<div class="kiosk"><button class="back" data-a="home" style="margin-bottom:12px">← Voltar</button><h1 class="kh">Olhe para a <span>câmera</span></h1><div id="camslot" class="camslot"></div><p class="hint" style="text-align:center">Se não funcionar, volte e use o QR Code ou a matrícula.</p></div>`;}
 function updateStats(){const a=$('#sin');if(!a)return false;const c=counts();a.textContent=c.inn;$('#sout').textContent=c.out;$('#sall').textContent=c.all;return true;}
 function sportChips(sel){return `<div class="chips">${SPORTS.map(x=>`<button class="chip ${sel.includes(x.id)?'on':''}" data-a="chip" data-v="${x.id}" style="--c:${x.color}">${x.emoji} ${x.name}</button>`).join('')}</div>`;}
 function studentRow(s,adm,only){
@@ -386,16 +390,21 @@ function render(){
   const cw=document.getElementById('camwrap');if(cw&&cw.parentNode)cw.parentNode.removeChild(cw);
   if(st.stage==='setup'){stopKiosk();a.innerHTML=setupHtml();return;}
   if(st.stage==='login'){stopKiosk();a.innerHTML=loginHtml();return;}
-  if(st.stage!=='app'){stopKiosk();a.innerHTML='<div class="splash"><img class="logo big" src="icon-192.png" alt=""><p>Carregando…</p></div>';return;}
+  if(st.stage!=='app'){stopKiosk();a.innerHTML='<div class="splash"><img class="hero-logo" src="logo.png" alt="Athletic Meriti"><p>Carregando…</p></div>';return;}
   const f=document.activeElement,fid=f&&f.id,pos=f&&f.selectionStart;
-  const adminView=st.view==='admin'&&st.prof;
-  a.innerHTML=topbar()+`<main class="page">${adminView?adminHtml():homeHtml()}</main>`+footer();
+  const adminView=st.view==='admin'&&st.prof,faceView=st.view==='face'&&!adminView;
+  a.innerHTML=topbar()+`<main class="page">${adminView?adminHtml():faceView?faceHtml():homeHtml()}</main>`+footer();
   if(fid==='aq'){const i=$('#aq');if(i){i.focus();try{i.setSelectionRange(pos,pos);}catch(e){}}}
-  if(adminView)stopKiosk();
-  else{const slot=$('#camslot');if(slot){slot.appendChild(camWrap());const v=kvideo();if(v&&v.srcObject)v.play().catch(()=>{});}startKiosk();}
+  clearTimeout(faceT);
+  if(faceView){
+    const slot=$('#camslot');if(slot){slot.appendChild(camWrap());const v=kvideo();if(v&&v.srcObject)v.play().catch(()=>{});}startKiosk();
+    const back=()=>{if(st.view!=='face')return;if(st.busy||$('#modal').classList.contains('show')){faceT=setTimeout(back,10000);return;}st.view='home';render();};
+    faceT=setTimeout(back,45000);
+  }else stopKiosk();
 }
 function refresh(){
   if(st.stage!=='app')return;
+  if(st.view==='face')return;
   if(!(st.view==='admin'&&st.prof)){if(!updateStats())render();return;}
   if(st.aTab==='cad'||st.aTab==='profs'||st.aTab==='cfg')return;
   render();
@@ -805,6 +814,7 @@ function fromCard(adm){
 function act(a,v,t){
   switch(a){
     case 'home':st.view='home';render();break;
+    case 'facecheck':st.view='face';render();break;
     case 'qr':scanQR();break;
     case 'mat':openMat();break;
     case 'prof':openProfPicker();break;
