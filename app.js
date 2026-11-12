@@ -1,5 +1,5 @@
 'use strict';
-const VERSION='2.6.1';
+const VERSION='2.8.0';
 const IDLE_MS=5*60*1000;
 const FACE_T=0.5;
 const FACE_LIB='https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js';
@@ -26,7 +26,6 @@ const SLOTS={
 const DEFAULT_DAYS={basquete:[2,4],futsal:[1,3]};
 const DOW=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const CLOSE_HOUR=20;
-const XLSX_LIB='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
 const ageOf=s=>{if(!s)return null;if(s.birthDate){const b=new Date(s.birthDate+'T12:00:00'),n=new Date();let a=n.getFullYear()-b.getFullYear();if(n<new Date(n.getFullYear(),b.getMonth(),b.getDate()))a--;return a;}return s.birthYear?new Date().getFullYear()-Number(s.birthYear):null;};
 const fits=(sl,age)=>age!=null&&age>=sl.age[0]&&age<=sl.age[1];
 const slotLabel=sl=>`${sl.shift} · ${sl.age[0]} a ${sl.age[1]} anos · ${sl.time}`;
@@ -56,7 +55,7 @@ function avatar(s,z){const st=z?`width:${z}px;height:${z}px;font-size:${Math.rou
 const logSports=l=>l.sports||(l.sport?[l.sport]:[]);
 
 /* ---------- estado ---------- */
-const st={stage:'boot',students:[],profs:[],pending:[],logs:{},prof:null,view:'home',aq:'',aTab:'hoje',hDate:dkey(),today:dkey(),fSport:'todos',delId:null,newPhoto:'',busy:false,profsLoaded:false,abs:{},closed:{},settings:{},ready:{},rDate:dkey()};
+const st={stage:'boot',students:[],profs:[],pending:[],logs:{},prof:null,view:'home',aq:'',aTab:'hoje',hDate:dkey(),today:dkey(),fSport:'todos',delId:null,newPhoto:'',busy:false,menuOpen:false,profsLoaded:false,abs:{},closed:{},settings:{},ready:{},rDate:dkey(),rSport:'futsal',pStart:'',pEnd:'',pickEnd:false,calMonth:dkey().slice(0,7)};
 let auth,fs,subs={},idleT,flT,tt,pad=null,cleanup=null,camStream=null,editPhoto='',portalSynced=false,faceP=null,cool={},closeT=null,faceT=null;
 const kcam={running:false,stream:null,timer:null,streak:{sid:null,n:0},miss:0,wake:null};
 
@@ -68,7 +67,7 @@ function closeModal(){const c=cleanup;cleanup=null;pad=null;$('#modal').classLis
 function stopCam(){if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}}
 function err(e){console.error(e);toast(e&&e.code==='permission-denied'?'Sem permissão no banco: confira as regras do Firestore':'Erro de sincronização. Tente novamente.');}
 function bumpIdle(){clearTimeout(idleT);if(st.prof)idleT=setTimeout(lockProf,IDLE_MS);}
-function lockProf(){if(!st.prof)return;st.prof=null;st.view='home';render();toast('Área do professor bloqueada por inatividade');}
+function lockProf(){if(!st.prof)return;st.prof=null;st.menuOpen=false;st.view='home';render();toast('Área do professor bloqueada por inatividade');}
 const getCam=f=>navigator.mediaDevices.getUserMedia({video:{facingMode:f==='environment'?{ideal:'environment'}:'user',width:{ideal:640},height:{ideal:640}},audio:false});
 
 /* ---------- Firebase ---------- */
@@ -255,6 +254,7 @@ function toggle(s,photo){
     // nova entrada: o aluno pode entrar e sair quantas vezes quiser no dia (cada entrada é uma sessão)
     const n=ss.length+1,id=n===1?logId(day,s.id):logId(day,s.id)+'_'+n;
     fs.collection('logs').doc(id).set({id,day,sid:s.id,sports,n,in:now,photoIn:photo||''}).catch(err);
+    fs.collection('attendance').doc(day).set({day,p:{[s.id]:now}},{merge:true}).catch(()=>{});
     portalEvent(s,id,{day,sports,in:now,photoIn:photo||'',ts:now},false);
     flash('✅',n>1?'Bem-vindo de volta!':'Check-in feito!',`Bom treino, ${first} ${em}`,photo);queue(s,'in');
   }else{
@@ -312,7 +312,22 @@ function migrateCodes(){
 /* ---------- telas ---------- */
 function setupHtml(){return `<div class="setup card"><h2>⚙️ Falta configurar</h2>${window.firebase?'<p>Abra o arquivo <code>firebase-config.js</code> e cole os dados do seu projeto Firebase. O passo a passo está no <b>LEIA-ME.md</b>.</p>':'<p>Não consegui carregar os componentes. Conecte à internet e abra novamente (só na primeira vez).</p>'}</div>`;}
 function loginHtml(){return `<div class="auth"><img class="hero-logo" src="logo.png" alt="Athletic Meriti"><h1>Athletic Meriti</h1><p>Entre com a conta deste aparelho</p><div class="fld"><input id="le" type="email" placeholder="E-mail" autocomplete="username"></div><div class="fld"><input id="lp" type="password" placeholder="Senha" autocomplete="current-password"></div><div class="bad" id="lerr"></div><button class="btn full" data-a="login">Entrar</button><p class="hint">Isso é feito uma vez por aparelho. Depois ele fica conectado.</p></div>`;}
-function topbar(){return `<header class="top"><div class="brand" data-a="home"><img src="icon-192.png" class="logo" alt=""><div><b>Athletic Meriti</b><small>Check-in &amp; check-out</small></div></div><div class="tr">${st.prof?`<span class="who">👤 ${esc(st.prof.name)}</span><button class="pbtn" data-a="panel">Painel</button><button class="pbtn ghost" data-a="lock">Sair</button>`:`<button class="pbtn" data-a="prof">🔒 Professor</button>`}</div></header>`;}
+function topbar(){return `<header class="top"><button class="burger" data-a="menu" aria-label="Menu">☰</button><div class="brand" data-a="home"><img src="icon-192.png" class="logo" alt=""><div><b>Athletic Meriti</b><small>Check-in &amp; check-out</small></div></div><div class="tr">${st.prof?`<span class="who">👤 ${esc(st.prof.name.split(' ')[0])}</span>`:''}</div></header>`;}
+const MENU=[['av','🔔','Avisos'],['hoje','📋','Presenças de hoje'],['hist','🗓','Histórico'],['rel','📊','Planilha de frequência'],['alunos','👥','Alunos'],['cad','➕','Cadastrar aluno'],['profs','🧑‍🏫','Professores'],['cfg','⚙️','Ajustes']];
+function drawerHtml(){
+  const adm=st.prof&&st.prof.role==='admin',inAdmin=st.view==='admin'&&st.prof;
+  let items='';
+  if(st.prof){
+    items+=`<div class="mt">Painel do professor</div>`;
+    MENU.forEach(m=>{
+      if(m[0]==='profs'&&!adm)return;
+      items+=`<button class="mi${inAdmin&&st.aTab===m[0]?' on':''}" data-a="mgo" data-v="${m[0]}"><span>${m[1]}</span>${m[2]}${m[0]==='av'&&st.pending.length?`<b class="bd">${st.pending.length}</b>`:''}</button>`;
+      if(m[0]==='alunos'&&adm)items+=`<button class="mi sub2" data-a="mimport"><span>📥</span>Importar alunos</button>`;
+    });
+    items+=`<div class="mt"></div><button class="mi red" data-a="lock"><span>🔒</span>Sair do modo professor</button>`;
+  }else items+=`<div class="mt">Professores</div><button class="mi" data-a="prof"><span>🔒</span>Entrar como professor</button>`;
+  return `<div class="scrim" data-a="menuclose"></div><nav class="drawer"><div class="dh"><img src="icon-192.png" class="logo" alt=""><div style="flex:1;min-width:0"><b>Athletic Meriti</b><small>${st.prof?esc(st.prof.name)+' · '+(adm?'Administrador':'Professor'):'Menu'}</small></div><button class="dx" data-a="menuclose" aria-label="Fechar">✕</button></div><button class="mi${st.view!=='admin'?' on':''}" data-a="mgo" data-v="home"><span>🏠</span>Início (check-in)</button>${items}</nav>`;
+}
 function footer(){return `<div class="foot">v${VERSION} · ${navigator.onLine?'🟢 online':'🟠 offline: sincroniza quando a internet voltar'}</div>`;}
 const counts=()=>({inn:st.students.filter(s=>status(s.id)==='in').length,out:st.students.filter(s=>status(s.id)==='out').length,all:st.students.length});
 function homeHtml(){const c=counts();
@@ -331,9 +346,8 @@ function studentRow(s,adm,only){
 }
 function adminHtml(){
   const adm=st.prof.role==='admin';
-  const tabs=[['av','Avisos'+(st.pending.length?` (${st.pending.length})`:'')],['hoje','Hoje'],['hist','Histórico'],['rel','Planilha'],['alunos','Alunos'],['cad','+ Aluno']];
-  if(adm)tabs.push(['profs','Professores']);tabs.push(['cfg','Ajustes']);
-  let h=`<div class="hello">Olá, <b>${esc(st.prof.name)}</b><span class="role">${adm?'Administrador':'Professor'}</span></div><div class="sub">${tabs.map(t=>`<button data-a="tab" data-v="${t[0]}" class="${st.aTab===t[0]?'on':''}">${t[1]}</button>`).join('')}</div>`;
+  const TITLES={av:'Avisos',hoje:'Presenças de hoje',hist:'Histórico',rel:'Planilha de frequência',alunos:'Alunos',cad:'Cadastrar aluno',profs:'Professores',cfg:'Ajustes'};
+  let h=`<div class="hello">Olá, <b>${esc(st.prof.name)}</b><span class="role">${adm?'Administrador':'Professor'}</span></div><h2 class="sec">${TITLES[st.aTab]||''}</h2>`;
   const T=st.aTab;
   if(adm&&need6().length)h+=`<div class="card" style="border-color:var(--or)"><b>${need6().length} aluno(s) com matrícula antiga (4 dígitos).</b><p class="hint" style="margin:6px 0 10px">A matrícula agora tem 6 dígitos. Converta para gerar as novas e avise alunos e pais (aba Alunos → 📲).</p><button class="btn full" data-a="migrate">Converter para 6 dígitos</button></div>`;
   if(T==='av'){
@@ -379,6 +393,7 @@ function adminHtml(){
   if(T==='cfg'){
     h+=trainDaysCard(adm);
     h+=fromCard(adm);
+    h+=adminCards(adm);
     h+=`<div class="card"><h3>Meu acesso</h3><button class="btn sec full" data-a="editprof" data-v="${st.prof.id}">Trocar meu nome ou PIN</button></div>
     <div class="card"><h3>Página dos pais</h3><p class="hint" style="margin:0 0 10px">Os pais abrem este endereço e digitam a matrícula de 6 dígitos do filho (aba Alunos). O botão 📲 do aluno já envia o link com a matrícula.</p><div class="fld"><input id="pl" readonly value="${esc(portalUrl())}"></div><button class="btn sec full" data-a="copylink">Copiar link</button></div>
     <div class="card"><h3>Este aparelho</h3><p class="hint" style="margin:0 0 10px">Versão ${VERSION}. O professor é bloqueado sozinho após 5 minutos sem uso.</p><button class="btn red full" data-a="logout">Desconectar este aparelho</button></div>`;
@@ -393,7 +408,7 @@ function render(){
   if(st.stage!=='app'){stopKiosk();a.innerHTML='<div class="splash"><img class="hero-logo" src="logo.png" alt="Athletic Meriti"><p>Carregando…</p></div>';return;}
   const f=document.activeElement,fid=f&&f.id,pos=f&&f.selectionStart;
   const adminView=st.view==='admin'&&st.prof,faceView=st.view==='face'&&!adminView;
-  a.innerHTML=topbar()+`<main class="page">${adminView?adminHtml():faceView?faceHtml():homeHtml()}</main>`+footer();
+  a.innerHTML=topbar()+`<main class="page">${adminView?adminHtml():faceView?faceHtml():homeHtml()}</main>`+footer()+(st.menuOpen?drawerHtml():'');
   if(fid==='aq'){const i=$('#aq');if(i){i.focus();try{i.setSelectionRange(pos,pos);}catch(e){}}}
   clearTimeout(faceT);
   if(faceView){
@@ -686,52 +701,210 @@ async function checkClose(){
   const from=st.settings.closing.from||today,list=[];
   for(let i=7;i>=1;i--){const d=new Date(now);d.setDate(d.getDate()-i);list.push(dkey(d));}
   if(now.getHours()>=CLOSE_HOUR)list.push(today);
-  const todo=list.filter(d=>d>=from&&!st.closed[d]&&st.students.some(s=>scheduledSports(s,d).length));
+  const todo=list.filter(d=>d>=from&&!st.closed[d]&&!isHoliday(d)&&st.students.some(s=>scheduledSports(s,d).length));
   if(!todo.length)return;
   closing=true;
   try{for(const d of todo)await closeDay(d);}catch(e){console.error(e);}
   closing=false;
 }
-const COLS=['Data','Aluno','Idade','Matrícula','Esporte(s)','Horário','Responsável','Celular do responsável','Celular do aluno','Situação','Entrada','Saída','Tempo','Motivo da falta','Mensagem enviada'];
-async function buildReport(day){
-  const [ls,as]=await Promise.all([fs.collection('logs').where('day','==',day).get(),fs.collection('absences').where('day','==',day).get()]);
-  const logs={},abs={};ls.forEach(d=>{const x=d.data();logs[x.sid]=x;});as.forEach(d=>{const x=d.data();abs[x.sid]=x;});
-  const closed=!!st.closed[day],end=new Date(day+'T23:59:59').getTime(),rows=[];
-  st.students.forEach(s=>{
-    if((s.createdAt||0)>end)return;
-    const l=logs[s.id],a=abs[s.id];
-    if(!l&&!a&&!scheduledSports(s,day).length)return;
-    const sit=l?'Presente':(a||closed)?'Falta':'Sem check-in (dia em andamento)',age=ageOf(s);
-    rows.push({sit,name:s.name,row:[fmtDate(day),s.name,age==null?'':age,s.code,(s.sports||[]).map(x=>sp_(x).name).join(' e '),schedText(s).join(' | '),[s.guardian,s.guardian2].filter(Boolean).join(' / '),[s.phone,s.phone2].filter(Boolean).map(fmtPhone).join(' / '),s.studentPhone?fmtPhone(s.studentPhone):'',sit,l&&l.in?hm(l.in):'',l&&l.out?hm(l.out):'',l&&l.in&&l.out?dur(l.in,l.out):'',a&&a.reason?a.reason:'',a?(a.notified?'Sim':'Não'):'']});
+/* ---------- planilha de frequência por período (modelo do projeto) ---------- */
+const EXCEL_LIB='https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+const MONTHS=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const XLSX_MIME='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const holidays=()=>((st.settings.holidays||{}).list||[]);
+const isHoliday=d=>holidays().includes(d);
+const colL=n=>{let s='';while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26);}return s;};
+const projectInfo=()=>Object.assign({nome:'',processo:'71000.049740/2024-78',sli:'2402640',proponente:'Athletic Meriti'},st.settings.project||{});
+function daysBetween(a,b){const out=[],d=new Date(a+'T12:00:00'),e=new Date(b+'T12:00:00');while(d<=e){out.push(dkey(d));d.setDate(d.getDate()+1);}return out;}
+/* presença por dia: um documento leve por dia (sem fotos), preenchido a cada check-in */
+async function loadAttendance(days,anyTrain){
+  const att={},today=dkey();
+  const past=days.filter(d=>d<=today);if(!past.length)return att;
+  const sn=await fs.collection('attendance').where('day','>=',past[0]).where('day','<=',past[past.length-1]).get();
+  const docs={};sn.forEach(d=>{docs[d.id]=d.data();});
+  const first=st.students.reduce((m,s)=>Math.min(m,s.createdAt||Infinity),Infinity);
+  const minDay=isFinite(first)?dkey(new Date(first)):'0000-00-00';
+  const todo=[];
+  past.forEach(d=>{
+    if(d===today){att[d]=new Set(Object.values(st.logs[d]||{}).map(l=>l.sid));return;}
+    const a=docs[d];
+    if(a&&a.full){att[d]=new Set(Object.keys(a.p||{}));return;}
+    if(anyTrain(d)&&d>=minDay)todo.push(d);              // dia de treino sem resumo: lê os registros do dia uma única vez
+    else if(a)att[d]=new Set(Object.keys(a.p||{}));
   });
-  rows.sort((x,y)=>(x.sit==='Presente'?0:1)-(y.sit==='Presente'?0:1)||String(x.name).localeCompare(y.name));
-  return rows.map(r=>r.row);
-}
-function makeXlsx(day,rows){
-  const pres=rows.filter(r=>r[9]==='Presente').length,fal=rows.filter(r=>r[9]==='Falta').length,pend=rows.length-pres-fal;
-  const wb=XLSX.utils.book_new();
-  const ws=XLSX.utils.aoa_to_sheet([COLS].concat(rows));ws['!cols']=[12,28,7,11,18,44,28,26,18,16,8,8,10,34,12].map(w=>({wch:w}));
-  XLSX.utils.book_append_sheet(wb,ws,'Presença');
-  const rs=XLSX.utils.aoa_to_sheet([['Data',fmtDate(day)],['Presentes',pres],['Faltas',fal],['Sem check-in (dia em andamento)',pend],['% de presença',rows.length?Math.round(100*pres/rows.length)+'%':'']]);rs['!cols']=[{wch:34},{wch:14}];
-  XLSX.utils.book_append_sheet(wb,rs,'Resumo');
-  const out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
-  return new File([out],`presenca-${day}.xlsx`,{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-}
-function makeCsv(day,rows){
-  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-  const txt='\uFEFF'+[COLS].concat(rows).map(r=>r.map(q).join(';')).join('\r\n');
-  return new File([txt],`presenca-${day}.csv`,{type:'text/csv'});
-}
-async function exportReport(day,mode){
-  toast('Gerando planilha…');
-  let rows;try{rows=await buildReport(day);}catch(e){console.error(e);toast('Não consegui montar a planilha. Verifique a internet.');return;}
-  let file;
-  try{if(!window.XLSX)await loadScript(XLSX_LIB);file=makeXlsx(day,rows);}catch(e){console.error(e);file=makeCsv(day,rows);}
-  if(mode==='share'&&navigator.canShare&&navigator.canShare({files:[file]})){
-    try{await navigator.share({files:[file],title:'Presença '+fmtDate(day)});return;}catch(e){if(e&&e.name==='AbortError')return;}
+  for(let i=0;i<todo.length;i+=8){
+    await Promise.all(todo.slice(i,i+8).map(async d=>{
+      const ls=await fs.collection('logs').where('day','==',d).get(),p={};
+      ls.forEach(x=>{const v=x.data();p[v.sid]=v.in||1;});
+      att[d]=new Set(Object.keys(p));
+      fs.collection('attendance').doc(d).set({day:d,p,full:true}).catch(()=>{});
+    }));
   }
-  downloadFiles([file]);toast('Planilha baixada: '+file.name);
+  return att;
 }
+function addMonthSheet(wb,name,sport,monthLabel,days,rows){
+  const ws=wb.addWorksheet(name,{views:[{zoomScale:80}]});
+  const n=days.length,lastD=n+1,cP=n+2,cF=n+3,info=Math.max(3,cP-2),pj=projectInfo();
+  const TNR={name:'Times New Roman',bold:true},SEG={name:'Segoe UI',size:12};
+  const thin={style:'thin'},med={style:'medium'},dbl={style:'double'};
+  const box=(r1,c1,r2,c2,b)=>{for(let r=r1;r<=r2;r++)for(let c=c1;c<=c2;c++){const x={};if(r===r1)x.top=b;if(r===r2)x.bottom=b;if(c===c1)x.left=b;if(c===c2)x.right=b;ws.getCell(r,c).border=x;}};
+  const merge=(r1,c1,r2,c2,val,font,al,b)=>{if(r1!==r2||c1!==c2)ws.mergeCells(r1,c1,r2,c2);const c=ws.getCell(r1,c1);c.value=val;c.font=font;c.alignment=al;if(b)box(r1,c1,r2,c2,b);};
+  ws.getColumn(1).width=54;for(let c=2;c<=lastD;c++)ws.getColumn(c).width=13.5;ws.getColumn(cP).width=11;ws.getColumn(cF).width=9;
+  ws.getRow(1).height=34;ws.getRow(2).height=32;ws.getRow(3).height=16.5;
+  merge(1,2,2,Math.max(2,info-1),'PLANILHA DE FREQUÊNCIA NOS TREINAMENTOS',Object.assign({size:16},TNR),{horizontal:'center',vertical:'middle',wrapText:true},dbl);
+  merge(1,info,1,cF,'Turma/Categoria: '+sp_(sport).name,Object.assign({size:10},TNR),{horizontal:'center',vertical:'top',wrapText:true});
+  merge(2,info,2,cF,'Nº Processo: '+pj.processo,Object.assign({size:10},TNR),{horizontal:'center',vertical:'top',wrapText:true});
+  merge(3,1,3,cF,null,Object.assign({size:9},TNR),{horizontal:'center',vertical:'middle'});
+  merge(4,1,4,Math.max(1,info-1),'NOME DO PROJETO: '+pj.nome,Object.assign({size:11},TNR),{horizontal:'left',vertical:'middle',wrapText:true},med);
+  merge(5,1,5,Math.max(1,info-1),'PROPONENTE: '+pj.proponente,Object.assign({size:11},TNR),{horizontal:'left',vertical:'middle',wrapText:true},med);
+  merge(4,info,5,cF,'N.º SLI: '+pj.sli,Object.assign({size:11},TNR),{horizontal:'center',vertical:'top',wrapText:true},med);
+  if(lastD>2)ws.mergeCells(7,2,7,lastD);
+  const mc=ws.getCell(7,2);mc.value=monthLabel;mc.font={name:'Calibri',size:11};mc.alignment={horizontal:'center'};
+  const hd=(r,c,v,bold)=>{const x=ws.getCell(r,c);x.value=v;x.font=Object.assign({bold:!!bold},SEG);x.alignment={horizontal:'center',vertical:'middle'};x.border={top:thin,left:thin,bottom:thin,right:thin};return x;};
+  hd(8,1,'Nome do Aluno',true);
+  days.forEach((k,i)=>{const hol=isHoliday(k),x=hd(8,2+i,hol?'FERIADO':new Date(Date.UTC(+k.slice(0,4),+k.slice(5,7)-1,+k.slice(8))));if(!hol)x.numFmt='dd/mm/yyyy';});
+  hd(8,cP,'Presença');hd(8,cF,'Falta');ws.getRow(8).height=20.1;
+  rows.forEach((row,i)=>{
+    const r=9+i;ws.getRow(r).height=20.1;
+    const a=ws.getCell(r,1);a.value=row.name;a.font=SEG;a.alignment={vertical:'middle'};a.border={top:thin,left:thin,bottom:thin,right:thin};
+    row.cells.forEach((v,j)=>{const c=ws.getCell(r,2+j);c.value=v||null;c.font=SEG;c.alignment={horizontal:'center',vertical:'middle'};c.border={top:thin,left:thin,bottom:thin,right:thin};});
+    const rng=`B${r}:${colL(lastD)}${r}`;
+    [['P',cP],['F',cF]].forEach(([ch,cc])=>{const c=ws.getCell(r,cc);c.value={formula:`COUNTIFS(${rng},"${ch}")`,result:row.cells.filter(v=>v===ch).length};c.font=SEG;c.alignment={horizontal:'center',vertical:'middle'};c.border={top:thin,left:thin,bottom:thin,right:thin};});
+  });
+  if(rows.length&&n){
+    const lr=8+rows.length,tot=lr+2,rng=`B9:${colL(lastD)}${lr}`,all=rows.reduce((x,r)=>x.concat(r.cells),[]);
+    [['Total de presença','P'],['Total de faltas','F']].forEach(([lab,ch],i)=>{
+      const l=ws.getCell(tot+i,1);l.value=lab;l.font=SEG;l.alignment={horizontal:'right'};l.border={top:thin,left:thin,bottom:thin,right:thin};
+      const v=ws.getCell(tot+i,2);v.value={formula:`COUNTIFS(${rng},"${ch}")`,result:all.filter(x=>x===ch).length};v.font=SEG;v.alignment={horizontal:'right'};v.border={top:thin,left:thin,bottom:thin,right:thin};
+    });
+  }
+}
+function addSummary(wb,name,sport,a,b,rows){
+  const ws=wb.addWorksheet(name,{views:[{zoomScale:90}]});
+  const SEG={name:'Segoe UI',size:12},thin={style:'thin'},bd={top:thin,left:thin,bottom:thin,right:thin};
+  ws.getColumn(1).width=54;[2,3,4,5].forEach(c=>{ws.getColumn(c).width=16;});
+  ws.mergeCells(1,1,1,5);const t=ws.getCell(1,1);t.value='RESUMO DO PERÍODO · '+sp_(sport).name.toUpperCase();t.font={name:'Times New Roman',bold:true,size:16};t.alignment={horizontal:'center',vertical:'middle'};ws.getRow(1).height=30;
+  ws.mergeCells(2,1,2,5);const p=ws.getCell(2,1);p.value=`De ${fmtDate(a)} até ${fmtDate(b)}`;p.font={name:'Segoe UI',size:12};p.alignment={horizontal:'center'};
+  ['Nome do Aluno','Presenças','Faltas','Dias no período','% de presença'].forEach((h,i)=>{const c=ws.getCell(4,1+i);c.value=h;c.font=Object.assign({bold:true},SEG);c.alignment={horizontal:'center',vertical:'middle',wrapText:true};c.border=bd;});
+  rows.forEach((r,i)=>{
+    const rr=5+i,tot=r.p+r.f;
+    const put=(c,v,al)=>{const x=ws.getCell(rr,c);x.value=v;x.font=SEG;x.alignment={horizontal:al||'center',vertical:'middle'};x.border=bd;return x;};
+    put(1,r.name,'left');put(2,r.p);put(3,r.f);
+    put(4,{formula:`B${rr}+C${rr}`,result:tot});
+    put(5,{formula:`IF(D${rr}=0,"",B${rr}/D${rr})`,result:tot?r.p/tot:''}).numFmt='0%';
+  });
+}
+async function periodWorkbook(sports,a,b){
+  const all=daysBetween(a,b),today=dkey(),late=new Date().getHours()>=CLOSE_HOUR;
+  const from=(st.settings.closing||{}).from||'9999-99-99';
+  const att=await loadAttendance(all,d=>sports.some(sp=>trainDays(sp).includes(dayOfWeek(d))));
+  const multiYear=a.slice(0,4)!==b.slice(0,4),wb=new ExcelJS.Workbook(),used=new Set();
+  const uniq=n=>{n=n.slice(0,31);let k=n,i=2;while(used.has(k)){k=n.slice(0,28)+' '+i++;}used.add(k);return k;};
+  const trains=(sp,k)=>trainDays(sp).includes(dayOfWeek(k));
+  // presença fora dos dias de treino de todos os esportes do aluno = dia extra
+  const extra=(s,k)=>!!(att[k]&&att[k].has(s.id))&&!(s.sports||[]).some(x=>trains(x,k));
+  const val=(sp,s,k)=>{
+    if(isHoliday(k))return '';
+    const x=att[k];
+    if(x&&x.has(s.id)&&(trains(sp,k)||extra(s,k)))return 'P';
+    if(!trains(sp,k))return '';
+    if(k<from||(s.createdAt||0)>new Date(k+'T23:59:59').getTime())return '';
+    if(k<today||(k===today&&(st.closed[k]||late)))return x?'F':'';
+    return '';
+  };
+  sports.forEach(sp=>{
+    const list=st.students.filter(s=>has(s,sp)).sort((x,y)=>String(x.name).localeCompare(String(y.name)));
+    const cols=all.filter(k=>trains(sp,k)||list.some(s=>extra(s,k)));
+    const tot=list.map(s=>({name:String(s.name).toLocaleUpperCase('pt-BR'),p:0,f:0}));
+    const byMonth={};cols.forEach(k=>{(byMonth[k.slice(0,7)]=byMonth[k.slice(0,7)]||[]).push(k);});
+    Object.keys(byMonth).sort().forEach(ym=>{
+      const days=byMonth[ym],M=+ym.slice(5,7),Y=ym.slice(0,4);
+      const rows=list.map((s,i)=>{const cells=days.map(k=>val(sp,s,k));tot[i].p+=cells.filter(c=>c==='P').length;tot[i].f+=cells.filter(c=>c==='F').length;return {name:tot[i].name,cells};});
+      const base=MONTHS[M-1]+(multiYear?' '+Y:'');
+      addMonthSheet(wb,uniq(sports.length>1?sp_(sp).name+' - '+base:base),sp,MONTHS[M-1].toUpperCase()+(multiYear?' '+Y:''),days,rows);
+    });
+    addSummary(wb,uniq('Resumo '+sp_(sp).name),sp,a,b,tot);
+  });
+  return wb.xlsx.writeBuffer();
+}
+async function exportPeriod(mode,quick){
+  if(quick){const t=dkey();st.pStart=t;st.pEnd=t;}
+  let a=st.pStart,b=st.pEnd||st.pStart;
+  if(!a)return toast('Escolha o período no calendário: toque na data inicial e na final');
+  if(b<a){const x=a;a=b;b=x;}
+  const sports=st.rSport==='ambas'?SPORTS.map(x=>x.id):[st.rSport];
+  if(!sports.some(sp=>trainDays(sp).length))return toast('Defina os dias de treino em Ajustes');
+  toast('Gerando planilha… períodos longos podem demorar um pouco');
+  try{
+    if(!window.ExcelJS)await loadScript(EXCEL_LIB);
+    const buf=await periodWorkbook(sports,a,b);
+    const tag=st.rSport==='ambas'?'geral':st.rSport;
+    const file=new File([buf],`frequencia-${tag}-${a}${b!==a?'_a_'+b:''}.xlsx`,{type:XLSX_MIME});
+    if(mode==='share'&&navigator.canShare&&navigator.canShare({files:[file]})){
+      try{await navigator.share({files:[file],title:'Frequência '+fmtDate(a)+(b!==a?' a '+fmtDate(b):'')});return;}catch(e){if(e&&e.name==='AbortError')return;}
+    }
+    downloadFiles([file]);toast('Planilha baixada: '+file.name);
+  }catch(e){console.error(e);toast('Não consegui gerar a planilha. Verifique a internet.');}
+}
+/* calendário para escolher o período */
+function calHtml(){
+  const [Y,M]=st.calMonth.split('-').map(Number),nd=new Date(Y,M,0).getDate(),off=new Date(Y,M-1,1).getDay();
+  const a=st.pStart,b=st.pEnd||st.pStart,lo=a&&b?(a<b?a:b):a,hi=a&&b?(a<b?b:a):a,t=dkey(),cy=new Date().getFullYear();
+  let cells='';for(let i=0;i<off;i++)cells+='<i></i>';
+  for(let d=1;d<=nd;d++){const k=`${Y}-${p2(M)}-${p2(d)}`;
+    cells+=`<button class="cd${k===t?' today':''}${lo&&k>=lo&&k<=hi?' in':''}${k===lo||k===hi?' edge':''}" data-a="calday" data-v="${k}">${d}</button>`;}
+  const yrs=[];for(let y=cy-15;y<=cy+5;y++)yrs.push(y);
+  return `<div class="cal"><div class="calh"><button class="calnav" data-a="calprev">‹</button><div class="calsel"><select id="calm">${MONTHS.map((m,i)=>`<option value="${i+1}" ${i+1===M?'selected':''}>${m}</option>`).join('')}</select><select id="caly">${yrs.map(y=>`<option ${y===Y?'selected':''}>${y}</option>`).join('')}</select></div><button class="calnav" data-a="calnext">›</button></div><div class="calw">${['D','S','T','Q','Q','S','S'].map(x=>`<span>${x}</span>`).join('')}</div><div class="calg">${cells}</div></div>`;
+}
+function setPreset(v){
+  const now=new Date(),f=d=>dkey(d);
+  let a,b;
+  if(v==='today')a=b=f(now);
+  else if(v==='yesterday'){const d=new Date(now);d.setDate(d.getDate()-1);a=b=f(d);}
+  else if(v==='week'){const d=new Date(now),w=(d.getDay()+6)%7;d.setDate(d.getDate()-w);const e=new Date(d);e.setDate(e.getDate()+6);a=f(d);b=f(e);}
+  else if(v==='month'){a=f(new Date(now.getFullYear(),now.getMonth(),1));b=f(new Date(now.getFullYear(),now.getMonth()+1,0));}
+  else if(v==='lastmonth'){a=f(new Date(now.getFullYear(),now.getMonth()-1,1));b=f(new Date(now.getFullYear(),now.getMonth(),0));}
+  else if(v==='year'){a=now.getFullYear()+'-01-01';b=now.getFullYear()+'-12-31';}
+  else if(v==='all'){a=(st.settings.closing||{}).from||f(now);b=f(now);}
+  st.pStart=a;st.pEnd=b;st.calMonth=a.slice(0,7);st.pickEnd=false;
+}
+function calDay(k){
+  if(!st.pStart||st.pEnd&&!st.pickEnd){st.pStart=k;st.pEnd='';st.pickEnd=true;}
+  else{if(k<st.pStart){st.pEnd=st.pStart;st.pStart=k;}else st.pEnd=k;st.pickEnd=false;}
+}
+function calMove(delta){const [Y,M]=st.calMonth.split('-').map(Number),d=new Date(Y,M-1+delta,1);st.calMonth=d.getFullYear()+'-'+p2(d.getMonth()+1);}
+function relTab(){
+  const closedList=Object.values(st.closed).sort((a,b)=>b.day.localeCompare(a.day)).slice(0,14);
+  const a=st.pStart,b=st.pEnd||st.pStart,n=a?daysBetween(a<b?a:b,a<b?b:a).length:0;
+  const resumo=!a?'Toque na data inicial e depois na final.':st.pickEnd?`Início: <b>${fmtDate(a)}</b>. Agora toque na data final (ou baixe só este dia).`:`Período: <b>${fmtDate(a<b?a:b)}</b> até <b>${fmtDate(a<b?b:a)}</b> (${n} dia${n>1?'s':''})`;
+  let h=`<div class="card"><h3>Planilha de frequência</h3><p class="hint" style="margin:0 0 12px">No modelo do projeto: nome do aluno e <b>P</b> (presença) ou <b>F</b> (falta) em cada dia de treino, com os totais. Se o período passar de um mês, sai uma folha por mês e uma folha de resumo.</p>
+  <button class="btn full" data-a="todaydl" style="margin-bottom:12px">⬇ Planilha de hoje</button>
+  <div class="fld"><label>Modalidade</label><select id="rsp">${SPORTS.map(x=>`<option value="${x.id}" ${st.rSport===x.id?'selected':''}>${x.emoji} ${x.name}</option>`).join('')}<option value="ambas" ${st.rSport==='ambas'?'selected':''}>Futsal e Basquete</option></select></div>
+  <label class="lab">Período</label><div class="chips" style="margin-bottom:10px">${[['today','Hoje'],['yesterday','Ontem'],['week','Esta semana'],['month','Este mês'],['lastmonth','Mês passado'],['year','Este ano'],['all','Desde o início']].map(x=>`<button class="chip" data-a="preset" data-v="${x[0]}">${x[1]}</button>`).join('')}</div>
+  ${calHtml()}<div class="m" style="text-align:center;margin:10px 0 12px;font-size:14px">${resumo}</div>
+  <div class="row"><button class="btn full" data-a="perdl">⬇ Baixar</button><button class="btn sec full" data-a="persh">📤 Compartilhar</button></div>
+  <p class="hint">Todo dia de treino, às ${CLOSE_HOUR}h, o app fecha o dia sozinho: quem não fez check-in recebe <b>F</b> e entra na fila de mensagens (aba Avisos). Isso acontece no primeiro aparelho aberto e conectado depois das ${CLOSE_HOUR}h.</p></div>`;
+  h+=`<div class="card"><h3>Dias fechados</h3>`;
+  h+=closedList.length?closedList.map(d=>`<div class="li"><div><b>${fmtDate(d.day)}</b></div><div class="m">${d.present} presentes · ${d.absent} faltas</div></div>`).join(''):'<div class="empty">Nenhum dia fechado ainda.</div>';
+  return h+'</div>';
+}
+function adminCards(adm){
+  if(!adm)return '';
+  const pj=projectInfo();
+  return `<div class="card"><h3>Dias sem treino (feriados)</h3><div class="row"><input type="date" id="hd2"><button class="btn" data-a="addhol">Adicionar</button></div><div class="chips">${holidays().map(d=>`<button class="chip on" data-a="delhol" data-v="${d}">${fmtDate(d)} ✕</button>`).join('')||'<span class="hint">Nenhum dia cadastrado.</span>'}</div><p class="hint">Nesses dias não há falta automática, e a planilha mostra FERIADO.</p></div>
+  <div class="card"><h3>Cabeçalho da planilha de frequência</h3><div class="fld"><label>Nome do projeto</label><input id="pj_nome" value="${esc(pj.nome)}"></div><div class="fld"><label>Nº do processo</label><input id="pj_processo" value="${esc(pj.processo)}"></div><div class="fld"><label>Nº SLI</label><input id="pj_sli" value="${esc(pj.sli)}"></div><div class="fld"><label>Proponente</label><input id="pj_prop" value="${esc(pj.proponente)}"></div><button class="btn full" data-a="saveproj">Salvar cabeçalho</button></div>`;
+}
+function addHoliday(){
+  const v=(($('#hd2')||{}).value||'');if(!v)return toast('Escolha a data');
+  const l=[...new Set(holidays().concat(v))].sort();
+  fs.collection('settings').doc('holidays').set({list:l}).catch(err);st.settings.holidays={list:l};render();toast('Dia sem treino adicionado');
+}
+function delHoliday(d){const l=holidays().filter(x=>x!==d);fs.collection('settings').doc('holidays').set({list:l}).catch(err);st.settings.holidays={list:l};render();}
+function saveProj(){
+  const g=id=>(($('#'+id)||{}).value||'').trim(),o={nome:g('pj_nome'),processo:g('pj_processo'),sli:g('pj_sli'),proponente:g('pj_prop')};
+  fs.collection('settings').doc('project').set(o).catch(err);st.settings.project=o;toast('Cabeçalho salvo');
+}
+
 function findAbs(id){for(const d in st.abs){if(st.abs[d][id])return st.abs[d][id];}return null;}
 function openReason(id){
   const a=findAbs(id);if(!a)return;const s=st.students.find(x=>x.id===a.sid)||{name:'Aluno'};
@@ -744,15 +917,6 @@ function faltasCard(day,f){
   let h=`<div class="card"><h3>Faltas (${ab.length})</h3>`;
   h+=ab.length?ab.map(a=>{const s=st.students.find(x=>x.id===a.sid);if(!s)return '';
     return `<div class="li" style="align-items:flex-start"><div class="lf">${avatar(s,40)}<div><b>${esc(s.name)}</b><div class="m">${(a.sports||[]).map(x=>sp_(x).emoji+' '+sp_(x).name).join(' · ')}</div><div class="m">${a.reason?'Motivo: '+esc(a.reason):'Motivo: não informado'}${a.notified?' · ✅ mensagem enviada':''}</div></div></div><div class="row" style="margin:0"><a class="btn sm wa" href="${waUrl({ev:'falta',day:a.day,sid:a.sid,sports:a.sports,ts:a.createdAt},s)}" target="_blank" rel="noopener" data-fsent="${a.id}">💬 Perguntar</a><button class="btn sm sec" data-a="reason" data-v="${a.id}">✏️ Motivo</button></div></div>`}).join(''):'<div class="empty">Nenhuma falta registrada neste dia.</div>';
-  return h+'</div>';
-}
-function relTab(){
-  const closedList=Object.values(st.closed).sort((a,b)=>b.day.localeCompare(a.day)).slice(0,14);
-  let h='';
-  if(!trainDays('futsal').length)h+=`<div class="card" style="border-color:var(--or)"><b>Atenção:</b> defina os dias de treino do Futsal em <b>Ajustes</b>. Sem isso o app não marca falta de alunos de futsal.</div>`;
-  h+=`<div class="card"><h3>Planilha de presença e falta</h3><div class="fld"><label>Dia</label><input type="date" id="rd" value="${st.rDate}"></div><div class="row"><button class="btn full" data-a="repdl">⬇ Baixar planilha</button><button class="btn sec full" data-a="repsh">📤 Compartilhar</button></div><p class="hint">Todo dia de treino, às ${CLOSE_HOUR}h, o app fecha o dia sozinho: quem não fez check-in recebe falta e entra na fila de mensagens (aba Avisos). Isso acontece no primeiro aparelho aberto e conectado depois das ${CLOSE_HOUR}h.</p></div>`;
-  h+=`<div class="card"><h3>Dias fechados</h3>`;
-  h+=closedList.length?closedList.map(d=>`<div class="li"><div><b>${fmtDate(d.day)}</b><div class="m">${d.present} presentes · ${d.absent} faltas</div></div><div class="row" style="margin:0"><button class="btn sm sec" data-a="repdl" data-v="${d.day}">⬇</button><button class="btn sm sec" data-a="repsh" data-v="${d.day}">📤</button></div></div>`).join(''):'<div class="empty">Nenhum dia fechado ainda.</div>';
   return h+'</div>';
 }
 function trainDaysCard(adm){
@@ -822,15 +986,19 @@ function fromCard(adm){
 /* ---------- eventos ---------- */
 function act(a,v,t){
   switch(a){
-    case 'home':st.view='home';render();break;
+    case 'home':st.view='home';st.menuOpen=false;render();break;
+    case 'menu':st.menuOpen=!st.menuOpen;render();break;
+    case 'menuclose':st.menuOpen=false;render();break;
+    case 'mgo':st.menuOpen=false;if(v==='home')st.view='home';else{st.view='admin';st.aTab=v;st.delId=null;}render();break;
+    case 'mimport':st.menuOpen=false;st.view='admin';st.aTab='alunos';render();openImport();break;
     case 'facecheck':st.view='face';render();break;
     case 'qr':scanQR();break;
     case 'mat':openMat();break;
-    case 'prof':openProfPicker();break;
+    case 'prof':st.menuOpen=false;render();openProfPicker();break;
     case 'pickprof':pickProf(v);break;
     case 'mkadmin':mkAdmin();break;
     case 'panel':st.view='admin';render();break;
-    case 'lock':st.prof=null;st.view='home';clearTimeout(idleT);render();break;
+    case 'lock':st.prof=null;st.view='home';st.menuOpen=false;clearTimeout(idleT);render();break;
     case 'tab':st.aTab=v;st.delId=null;render();break;
     case 'fsport':st.fSport=v;render();break;
     case 'close':closeModal();break;
@@ -859,8 +1027,16 @@ function act(a,v,t){
     case 'newcode':newCode(v);break;
     case 'copylink':if(navigator.clipboard)navigator.clipboard.writeText(portalUrl()).then(()=>toast('Link copiado'),()=>toast('Não consegui copiar'));break;
     case 'migrate':migrateCodes();break;
-    case 'repdl':exportReport(v||st.rDate,'download');break;
-    case 'repsh':exportReport(v||st.rDate,'share');break;
+    case 'perdl':exportPeriod('download');break;
+    case 'persh':exportPeriod('share');break;
+    case 'todaydl':exportPeriod('download',true);break;
+    case 'preset':setPreset(v);render();break;
+    case 'calday':calDay(v);render();break;
+    case 'calprev':calMove(-1);render();break;
+    case 'calnext':calMove(1);render();break;
+    case 'addhol':addHoliday();break;
+    case 'delhol':delHoliday(v);break;
+    case 'saveproj':saveProj();break;
     case 'reason':openReason(v);break;
     case 'savereason':saveReason(v);break;
     case 'savedays':saveDays();break;
@@ -894,11 +1070,12 @@ document.addEventListener('input',e=>{if(e.target.id==='aq'){st.aq=e.target.valu
 document.addEventListener('change',e=>{
   const i=e.target;
   if(i.id==='impf'&&i.files[0])handleImport(i.files[0]);
-  if(i.id==='rd'){st.rDate=i.value||dkey();render();}
+  if(i.id==='rsp'){st.rSport=i.value;}
+  if(i.id==='calm'||i.id==='caly'){const [Y,M]=st.calMonth.split('-');st.calMonth=(i.id==='caly'?i.value:Y)+'-'+p2(i.id==='calm'?+i.value:+M);render();}
   if(i.id==='hd'){st.hDate=i.value||dkey();watchDay('hist',st.hDate);render();}
   if((i.id==='ph'||i.id==='ph2')&&i.files[0])readPhoto(i.files[0],d=>{st.newPhoto=d;$('#prev').innerHTML=`<img src="${d}" alt="">`;});
   if((i.id==='eph'||i.id==='eph2')&&i.files[0])readPhoto(i.files[0],d=>{editPhoto=d;$('#eprev').innerHTML=`<div class="av" style="width:56px;height:56px;margin:0"><img src="${d}" alt=""></div>`;});
 });
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.target.id==='lp'||e.target.id==='le'))doLogin();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&st.menuOpen){st.menuOpen=false;render();}if(e.key==='Enter'&&(e.target.id==='lp'||e.target.id==='le'))doLogin();});
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 boot();
